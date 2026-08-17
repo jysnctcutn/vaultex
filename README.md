@@ -426,6 +426,43 @@ edit.
 - **Read-only mode**: `READ_ONLY=true` removes write tools from the tool list
   entirely, not just from what they're allowed to do.
 
+### Self-reviewed against OWASP Top 10 (2025)
+
+A pass against the OWASP Top 10 (2025) checklist, verified against the
+actual source rather than assumed — items below are things anyone can
+re-check themselves, not just asserted:
+
+- **No SQL/NoSQL injection surface** — all SQLite access (`core/oauth/store.py`,
+  `core/embeddings.py`) uses parameterized `?` placeholders, no string-built
+  queries.
+- **No command injection** — no `shell=True`, no `eval`/`exec` anywhere in the
+  codebase; `install.py`'s `subprocess` calls use list-form arguments against
+  fixed commands, never attacker-controlled input.
+- **Vault-root escape is blocked** — `safe_path()`'s containment check
+  (`VAULT_PATH not in candidate.parents`) rejects any resolved path landing
+  outside the vault, regardless of how it was constructed.
+- **No secrets in source or git history** — `.env`, `taxonomy.json`, and the
+  local `*.db` stores are gitignored and confirmed untracked
+  (`git ls-files | grep -E '\.env$|\.db$|taxonomy\.json$'` returns nothing).
+- **No raw stack traces or internal errors returned to clients** — tool
+  errors surface through the MCP protocol's own error path, never an HTTP
+  response body.
+- **Baseline security headers set globally** —
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: strict-origin-when-cross-origin`, and a restrictive
+  `Permissions-Policy`, applied to every response via
+  `SecurityHeadersMiddleware`.
+- **No permissive CORS** — no CORS middleware is configured at all, which is
+  the safe default (browsers block cross-origin requests with none
+  configured); nothing here uses a wildcard origin with credentials.
+- **OAuth hardening** — timing-safe comparisons throughout
+  (`secrets.compare_digest`), PKCE and `state` handled by the MCP SDK's
+  authorization layer, per-login-attempt and per-IP lockout on `/login`
+  (`core/oauth/login.py`), and refresh-token rotation on every use.
+
+This is a self-review, not an independent third-party audit — treat it as a
+starting point for your own risk assessment, not a certification.
+
 Deployment is meant to progress in phases: local-only, then tunneled
 read-only, then tunneled read/write once trusted, then agent automation on
 top. See the docstring in `server.py` for the exact phase breakdown.
