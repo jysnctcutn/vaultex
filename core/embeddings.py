@@ -7,6 +7,8 @@ standalone script that only needs VAULTEX_PATH, not the full server env
 (MCP_AUTH_TOKEN etc.) that importing core.config would pull in.
 """
 
+import asyncio
+import logging
 import re
 import sqlite3
 from pathlib import Path
@@ -17,6 +19,8 @@ try:
     _SEMANTIC_DEPS_AVAILABLE = True
 except ImportError:
     _SEMANTIC_DEPS_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
 
 MODEL_NAME = "BAAI/bge-small-en-v1.5"
 EMBEDDING_DIM = 384
@@ -149,3 +153,59 @@ def index_note(conn: sqlite3.Connection, model: "SentenceTransformer", vault_pat
         (rel, note_path.stat().st_mtime),
     )
     return len(chunks)
+
+
+def incremental_sweep(vault_path: Path, db_path: Path, on_note=None) -> dict:
+    """One incremental pass over the whole vault: re-embed any note whose
+    mtime has changed since it was last indexed, and drop entries for notes
+    no longer on disk (e.g. deleted directly in Obsidian, outside any MCP
+    tool the write-hook in core/vault.py could see). Shared by
+    index_vault.py's CLI and the periodic background sweep below, so
+    there's one tested implementation instead of two.
+
+    on_note, if given, is called on_note(rel_path, chunks) after each note
+    is (re)indexed, and on_note(rel_path, None) for each removed stale path
+    — lets a caller (the CLI) report progress without duplicating the
+    walk/diff loop.
+    """
+    conn = connect(db_path)
+    try:
+        stored_mtimes = dict(conn.execute("SELECT path, mtime FROM files"))
+        seen_paths: set[str] = set()
+        indexed = 0
+        indexed_chunks = 0
+        for note_path in sorted(vault_path.rglob("*.md")):
+            rel = str(note_path.relative_to(vault_path))
+            seen_paths.add(rel)
+            if stored_mtimes.get(rel) == note_path.stat().st_mtime:
+                continue
+            n = index_note(conn, get_model(), vault_path, note_path)
+            indexed += 1
+            indexed_chunks += n
+            if on_note:
+                on_note(rel, n)
+        stale_paths = set(stored_mtimes) - seen_paths
+        for rel in stale_paths:
+            delete_path(conn, rel)
+            if on_note:
+                on_note(rel, None)
+        conn.commit()
+        return {"indexed": indexed, "indexed_chunks": indexed_chunks, "removed": len(stale_paths)}
+    finally:
+        conn.close()
+
+
+async def periodic_reindex(vault_path: Path, db_path: Path, interval_seconds: int) -> None:
+    """Background task: run incremental_sweep() on a timer for as long as
+    the server is up, so notes edited or deleted outside the MCP tools
+    don't leave the semantic index stale indefinitely. Runs the (blocking,
+    CPU-bound) sweep in a thread so it never stalls concurrent request
+    handling on the same event loop."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            result = await asyncio.to_thread(incremental_sweep, vault_path, db_path)
+            if result["indexed"] or result["removed"]:
+                logger.info("Periodic reindex: %s", result)
+        except Exception:
+            logger.warning("Periodic reindex sweep failed", exc_info=True)

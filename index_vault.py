@@ -27,7 +27,14 @@ from dotenv import load_dotenv
 # script, if present, so it doesn't need exporting by hand — same as server.py.
 load_dotenv(Path(__file__).parent / ".env")
 
-from core.embeddings import MODEL_NAME, connect, delete_path, get_model, index_note  # noqa: E402
+from core.embeddings import MODEL_NAME, connect, get_model, incremental_sweep, index_note  # noqa: E402
+
+
+def _print_progress(rel: str, chunks: int | None) -> None:
+    if chunks is None:
+        print(f"  removed {rel} (no longer in vault)")
+    else:
+        print(f"  indexed {rel} ({chunks} chunks)")
 
 
 def main() -> None:
@@ -53,40 +60,40 @@ def main() -> None:
         raise SystemExit(f"Vault path does not exist: {vault_path}")
 
     db_path = Path(args.db).expanduser().resolve()
-    conn = connect(db_path)
 
     print(f"Loading embedding model ({MODEL_NAME})...")
-    model = get_model()
+    get_model()  # warm the cache before the loop so it's not attributed to the first file
 
-    stored_mtimes = dict(conn.execute("SELECT path, mtime FROM files")) if not args.full else {}
-    seen_paths: set[str] = set()
-    indexed_notes = 0
-    indexed_chunks = 0
-
-    for note_path in sorted(vault_path.rglob("*.md")):
-        rel = str(note_path.relative_to(vault_path))
-        seen_paths.add(rel)
-        current_mtime = note_path.stat().st_mtime
-        if not args.full and stored_mtimes.get(rel) == current_mtime:
-            continue
-        n = index_note(conn, model, vault_path, note_path)
-        indexed_notes += 1
-        indexed_chunks += n
-        print(f"  indexed {rel} ({n} chunks)")
-
-    stale_paths = set(stored_mtimes) - seen_paths
-    for rel in stale_paths:
-        delete_path(conn, rel)
-        print(f"  removed {rel} (no longer in vault)")
-
-    conn.commit()
-    total_chunks = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
-    total_files = conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
-    conn.close()
+    if args.full:
+        # Bypasses incremental_sweep() deliberately: --full re-embeds every
+        # file unconditionally and (same as before this refactor) doesn't
+        # attempt stale-entry cleanup, since it never looks at what's
+        # currently stored.
+        conn = connect(db_path)
+        model = get_model()
+        indexed_notes = indexed_chunks = 0
+        for note_path in sorted(vault_path.rglob("*.md")):
+            rel = str(note_path.relative_to(vault_path))
+            n = index_note(conn, model, vault_path, note_path)
+            indexed_notes += 1
+            indexed_chunks += n
+            print(f"  indexed {rel} ({n} chunks)")
+        removed = 0
+        conn.commit()
+        total_chunks = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+        total_files = conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+        conn.close()
+    else:
+        result = incremental_sweep(vault_path, db_path, on_note=_print_progress)
+        indexed_notes, indexed_chunks, removed = result["indexed"], result["indexed_chunks"], result["removed"]
+        conn = connect(db_path)
+        total_chunks = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+        total_files = conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+        conn.close()
 
     print(
         f"\nDone. {indexed_notes} notes re-indexed ({indexed_chunks} chunks), "
-        f"{len(stale_paths)} removed. Database now has {total_files} notes, "
+        f"{removed} removed. Database now has {total_files} notes, "
         f"{total_chunks} chunks total. -> {db_path}"
     )
 

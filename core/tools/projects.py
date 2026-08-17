@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-from ..config import VAULT_PATH
 from ..mcp_app import mcp, write_tool
 from ..vault import (
     BUILDER_PROJECTS,
@@ -10,6 +9,7 @@ from ..vault import (
     check_area_allowed,
     iter_markdown,
     read,
+    read_capped,
     require_role,
     safe_path,
     write,
@@ -23,15 +23,14 @@ def project_root(project_name: str, professional: bool) -> Path:
 
 
 @mcp.tool()
-def get_project_context(project_name: str, professional: bool = False) -> list[dict]:
-    """Gather all notes for a project (Builder project by default, or a
-    Solution-Architecture project when professional=True)."""
+def get_project_context(project_name: str, professional: bool = False, limit: int = 10) -> list[dict]:
+    """Gather notes for a project (Builder project by default, or a
+    Solution-Architecture project when professional=True), most-recently
+    modified first, capped at `limit` notes. Pass a bigger `limit` for
+    older notes, or use read_note for a specific known path."""
     root_rel = project_root(project_name, professional)
     check_area_allowed(root_rel)
-    notes = []
-    for p in iter_markdown(root_rel):
-        notes.append({"path": str(p.relative_to(VAULT_PATH)), "content": read(p)})
-    return notes
+    return read_capped(iter_markdown(root_rel), limit=limit)
 
 
 @mcp.tool()

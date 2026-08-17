@@ -45,6 +45,17 @@ EMBEDDINGS_DB_PATH = Path(
     os.environ.get("VAULT_EMBEDDINGS_DB", str(BASE_DIR / "vault_embeddings.db"))
 ).expanduser().resolve()
 
+# How often (seconds) the background sweep in core/app.py re-syncs
+# vault_embeddings.db with what's actually on disk — catches edits/deletes
+# made outside the MCP tools (e.g. directly in Obsidian), which the
+# write-hook in core/vault.py can't see. Only starts at all if
+# EMBEDDINGS_DB_PATH already exists at server startup.
+_REINDEX_INTERVAL_RAW = os.environ.get("REINDEX_INTERVAL_SECONDS", "300")
+try:
+    REINDEX_INTERVAL_SECONDS = int(_REINDEX_INTERVAL_RAW)
+except ValueError:
+    raise SystemExit(f"REINDEX_INTERVAL_SECONDS must be an integer, got: {_REINDEX_INTERVAL_RAW!r}")
+
 # Top-level folder names this server instance refuses to touch at all.
 # Use this to run a second, restricted instance for non-Claude / personal
 # AI accounts that should never see 01-Professional (client/employer work).

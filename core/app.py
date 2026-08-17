@@ -1,9 +1,13 @@
 """Assembles the Starlette ASGI app: tool registration plus auth/security middleware."""
 
+import asyncio
+import contextlib
+
 from starlette.applications import Starlette
 
 from . import tools  # noqa: F401  (import registers every @mcp.tool())
-from .config import HOST, OAUTH_ISSUER_URL
+from .config import EMBEDDINGS_DB_PATH, HOST, OAUTH_ISSUER_URL, REINDEX_INTERVAL_SECONDS, VAULT_PATH
+from .embeddings import _SEMANTIC_DEPS_AVAILABLE, periodic_reindex
 from .mcp_app import mcp
 from .middleware import BearerAuthMiddleware, SecurityHeadersMiddleware
 
@@ -23,4 +27,34 @@ def build_app() -> Starlette:
     # /.well-known/oauth-authorization-server) stay public by design.
 
     app.add_middleware(SecurityHeadersMiddleware)
+
+    # Only start the periodic reindex sweep if semantic search has already
+    # been opted into (index built at least once) — same no-op-until-opted-in
+    # gate the write-hook in core/vault.py already uses. Checked once at
+    # startup, not re-polled.
+    if _SEMANTIC_DEPS_AVAILABLE and EMBEDDINGS_DB_PATH.exists():
+        # mcp.streamable_http_app() already built this app with its own
+        # lifespan (the StreamableHTTP session manager's startup/shutdown) —
+        # this Starlette version only accepts `lifespan=` at construction,
+        # with no public method to add another handler after the fact, so
+        # the supported way to layer one on is replacing the router's
+        # lifespan_context with a wrapper that still enters/exits the
+        # original.
+        original_lifespan = app.router.lifespan_context
+
+        @contextlib.asynccontextmanager
+        async def lifespan_with_reindex(app):
+            async with original_lifespan(app) as state:
+                task = asyncio.create_task(
+                    periodic_reindex(VAULT_PATH, EMBEDDINGS_DB_PATH, REINDEX_INTERVAL_SECONDS)
+                )
+                try:
+                    yield state
+                finally:
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
+
+        app.router.lifespan_context = lifespan_with_reindex
+
     return app

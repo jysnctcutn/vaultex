@@ -6,14 +6,12 @@ from ..vault import BUILDER_IDEAS, iter_markdown, read, require_role, safe_path,
 
 
 @mcp.tool()
-def get_app_ideas() -> list[dict]:
-    """List app ideas from the configured builder-ideas folder with a short excerpt of each."""
+def get_app_ideas(limit: int = 10) -> list[dict]:
+    """List app ideas from the configured builder-ideas folder with a short
+    excerpt of each, most-recently modified first, capped at `limit`."""
     root = require_role(BUILDER_IDEAS, "builder_ideas")
-    out = []
-    for p in iter_markdown(root):
-        text = read(p)
-        out.append({"path": str(p.relative_to(VAULT_PATH)), "excerpt": text[:200].strip()})
-    return out
+    paths = sorted(iter_markdown(root), key=lambda p: p.stat().st_mtime, reverse=True)[:limit]
+    return [{"path": str(p.relative_to(VAULT_PATH)), "excerpt": read(p)[:200].strip()} for p in paths]
 
 
 @write_tool

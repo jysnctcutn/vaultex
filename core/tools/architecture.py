@@ -1,6 +1,5 @@
 """Solution Architecture tools (professional area): decisions, gap analysis, full project context."""
 
-from ..config import VAULT_PATH
 from ..mcp_app import mcp, write_tool
 from ..vault import (
     BUILDER_PROJECTS,
@@ -10,7 +9,7 @@ from ..vault import (
     PROFESSIONAL_TECH_ANALYSIS,
     check_area_allowed,
     iter_markdown,
-    read,
+    read_capped,
     require_role,
     safe_path,
     slug,
@@ -20,10 +19,12 @@ from ..vault import (
 
 
 @mcp.tool()
-def get_architecture_decisions(project_name: str | None = None, professional: bool = True) -> list[dict]:
-    """List architecture decision notes. professional=True (default) reads
-    the configured professional-decisions folder; professional=False reads
-    the equivalent Decisions.md inside a Builder project instead."""
+def get_architecture_decisions(project_name: str | None = None, professional: bool = True,
+                                limit: int = 10) -> list[dict]:
+    """List architecture decision notes, most-recently modified first,
+    capped at `limit`. professional=True (default) reads the configured
+    professional-decisions folder; professional=False reads the equivalent
+    Decisions.md inside a Builder project instead."""
     if professional:
         root_rel = require_role(PROFESSIONAL_DECISIONS, "professional_decisions") if not project_name \
             else require_role(PROFESSIONAL_PROJECTS, "professional_projects") / project_name
@@ -32,11 +33,8 @@ def get_architecture_decisions(project_name: str | None = None, professional: bo
             raise ValueError("project_name is required when professional=False")
         root_rel = require_role(BUILDER_PROJECTS, "builder_projects") / project_name
     check_area_allowed(root_rel)
-    out = []
-    for p in iter_markdown(root_rel):
-        if professional or "decision" in p.name.lower():
-            out.append({"path": str(p.relative_to(VAULT_PATH)), "content": read(p)})
-    return out
+    paths = [p for p in iter_markdown(root_rel) if professional or "decision" in p.name.lower()]
+    return read_capped(paths, limit=limit)
 
 
 @write_tool
@@ -64,34 +62,33 @@ def save_decision(title: str, content: str, professional: bool = False,
 
 
 @mcp.tool()
-def get_tech_analysis_history(project_name: str | None = None) -> list[dict]:
+def get_tech_analysis_history(project_name: str | None = None, limit: int = 10) -> list[dict]:
     """List tech-analysis notes from the configured professional-tech-analysis
-    folder, optionally filtered to those whose filename mentions project_name."""
+    folder, most-recently modified first, capped at `limit`, optionally
+    filtered to those whose filename mentions project_name."""
     root = require_role(PROFESSIONAL_TECH_ANALYSIS, "professional_tech_analysis")
     check_area_allowed(root)
-    out = []
     needle = project_name.lower() if project_name else None
-    for p in iter_markdown(root):
-        if needle and needle not in p.name.lower():
-            continue
-        out.append({"path": str(p.relative_to(VAULT_PATH)), "content": read(p)})
-    return out
+    paths = [p for p in iter_markdown(root) if not needle or needle in p.name.lower()]
+    return read_capped(paths, limit=limit)
 
 
 @mcp.tool()
-def get_solution_architecture_context(project_name: str) -> dict:
+def get_solution_architecture_context(project_name: str, limit: int = 10) -> dict:
     """Gather everything relevant to a Solution Architecture project: the
-    project's own notes plus any matching tech-analysis and architecture notes."""
+    project's own notes plus any matching tech-analysis and architecture
+    notes, each most-recently modified first and capped at `limit`."""
     projects_root = require_role(PROFESSIONAL_PROJECTS, "professional_projects")
     root_rel = projects_root / project_name
     check_area_allowed(root_rel)
-    project_notes = [{"path": str(p.relative_to(VAULT_PATH)), "content": read(p)}
-                      for p in iter_markdown(root_rel)]
+    project_notes = read_capped(iter_markdown(root_rel), limit=limit)
     needle = project_name.lower()
     tech_analysis_root = require_role(PROFESSIONAL_TECH_ANALYSIS, "professional_tech_analysis")
     architecture_root = require_role(PROFESSIONAL_ARCHITECTURE, "professional_architecture")
-    tech_analysis_notes = [{"path": str(p.relative_to(VAULT_PATH)), "content": read(p)}
-                            for p in iter_markdown(tech_analysis_root) if needle in p.name.lower()]
-    arch_notes = [{"path": str(p.relative_to(VAULT_PATH)), "content": read(p)}
-                  for p in iter_markdown(architecture_root) if needle in p.name.lower()]
+    tech_analysis_notes = read_capped(
+        [p for p in iter_markdown(tech_analysis_root) if needle in p.name.lower()], limit=limit
+    )
+    arch_notes = read_capped(
+        [p for p in iter_markdown(architecture_root) if needle in p.name.lower()], limit=limit
+    )
     return {"project": project_notes, "tech_analysis": tech_analysis_notes, "architecture": arch_notes}

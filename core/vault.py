@@ -77,6 +77,17 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def read_capped(paths, limit: int | None = None) -> list[dict]:
+    """Read (path, content) for each markdown path, most-recently-modified
+    first, capped at `limit` notes if given — so a project that's
+    accumulated many notes doesn't blow a tool response past what a
+    client's context window can hold in one call."""
+    paths = sorted(paths, key=lambda p: p.stat().st_mtime, reverse=True)
+    if limit is not None:
+        paths = paths[:limit]
+    return [{"path": str(p.relative_to(VAULT_PATH)), "content": read(p)} for p in paths]
+
+
 def write(path: Path, content: str, overwrite: bool) -> str:
     if path.exists() and not overwrite:
         raise FileExistsError(f"{path.relative_to(VAULT_PATH)} already exists; pass overwrite=True")
