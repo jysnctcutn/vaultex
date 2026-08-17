@@ -7,7 +7,8 @@ can't be bypassed by a new tool forgetting to call them.
 
 from pathlib import Path
 
-from .config import EXCLUDED_AREAS, VAULT_PATH
+from .config import EMBEDDINGS_DB_PATH, EXCLUDED_AREAS, VAULT_PATH, logger
+from .embeddings import _SEMANTIC_DEPS_AVAILABLE, connect as _embeddings_connect, get_model, index_note as _index_note
 from .taxonomy import roles
 
 # Area roots — sourced from taxonomy.json (see core/taxonomy.py), not
@@ -81,7 +82,28 @@ def write(path: Path, content: str, overwrite: bool) -> str:
         raise FileExistsError(f"{path.relative_to(VAULT_PATH)} already exists; pass overwrite=True")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+    _reindex(path)
     return str(path.relative_to(VAULT_PATH))
+
+
+def _reindex(path: Path) -> None:
+    """Keep the semantic-search index current on every save — every write
+    tool funnels through write() above, so this covers all of them in one
+    place. A no-op if semantic search hasn't been set up for this vault yet
+    (run `python3 index_vault.py` once to opt in); a save must never fail
+    just because reindexing did.
+    """
+    if not _SEMANTIC_DEPS_AVAILABLE or not EMBEDDINGS_DB_PATH.exists():
+        return
+    try:
+        conn = _embeddings_connect(EMBEDDINGS_DB_PATH)
+        try:
+            _index_note(conn, get_model(), VAULT_PATH, path)
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        logger.warning("Semantic reindex failed for %s", path, exc_info=True)
 
 
 def slug(title: str) -> str:

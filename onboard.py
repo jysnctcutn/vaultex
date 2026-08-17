@@ -70,14 +70,14 @@ def _prompt_choice(folders: list[str], prompt: str) -> str | None:
     return raw
 
 
-def _load_existing() -> dict:
+def load_taxonomy() -> dict:
     if TAXONOMY_PATH.exists():
         with open(TAXONOMY_PATH, encoding="utf-8") as f:
             return json.load(f)
     return {"roles": {}, "custom_categories": []}
 
 
-def _write(data: dict) -> None:
+def write_taxonomy(data: dict) -> None:
     with open(TAXONOMY_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
         f.write("\n")
@@ -93,7 +93,7 @@ def main() -> None:
     args = parser.parse_args()
 
     vault = _vault_path()
-    data = {"roles": {}, "custom_categories": []} if args.reconfigure else _load_existing()
+    data = {"roles": {}, "custom_categories": []} if args.reconfigure else load_taxonomy()
 
     if not args.reconfigure and (data["roles"] or data["custom_categories"]):
         print(f"taxonomy.json already has {len(data['roles'])} role(s) and "
@@ -153,7 +153,7 @@ def main() -> None:
         })
         print(f"  Added: {get_tool_name}() / {create_tool_name}(title, content) -> {folder}/")
 
-    _write(data)
+    write_taxonomy(data)
 
     print(f"\nWrote {TAXONOMY_PATH}")
     configured = [k for k, _ in ROLES if k in data["roles"]]

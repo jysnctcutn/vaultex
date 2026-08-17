@@ -68,6 +68,15 @@ OAUTH_STORE_DB = Path(
     os.environ.get("OAUTH_STORE_DB", str(BASE_DIR / "oauth_store.db"))
 ).expanduser().resolve()
 
+# Dynamic client registration (RFC 7591) is open by design — anyone can hit
+# /register — but nothing says the server has to accept just any client.
+# core/oauth/provider.py rejects registrations whose redirect_uri host isn't
+# in this list, so a random internet client can never complete a full OAuth
+# flow (it can't receive the redirect) even though the endpoint is public.
+ALLOWED_REDIRECT_HOSTS = {
+    h.strip().lower() for h in os.environ.get("ALLOWED_REDIRECT_HOSTS", "claude.ai").split(",") if h.strip()
+}
+
 if OAUTH_ISSUER_URL and not AUTHORIZE_PASSWORD:
     raise SystemExit("Set AUTHORIZE_PASSWORD when OAUTH_ISSUER_URL is set — it gates the /login consent screen.")
 

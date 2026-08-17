@@ -8,17 +8,19 @@ methods only need to handle storage and the single-user consent hand-off.
 
 import secrets
 import time
+from urllib.parse import urlparse
 
 from mcp.server.auth.provider import (
     AccessToken,
     AuthorizationParams,
     IdentityAssertionParams,
     RefreshToken,
+    RegistrationError,
     TokenError,
 )
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 
-from ..config import AUTH_TOKEN, OAUTH_STORE_DB
+from ..config import ALLOWED_REDIRECT_HOSTS, AUTH_TOKEN, OAUTH_STORE_DB
 from . import store
 from .login import park_pending_login
 
@@ -33,6 +35,20 @@ class VaultexOAuthProvider:
         return store.get_client(OAUTH_STORE_DB, client_id)
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
+        # DCR itself is unauthenticated by spec — this is the only gate
+        # between /register and a stranger reaching the /login password
+        # form. A rejected host means the client could never receive the
+        # redirect anyway, so it can't complete a real flow.
+        for uri in client_info.redirect_uris:
+            host = (urlparse(str(uri)).hostname or "").lower()
+            if host not in ALLOWED_REDIRECT_HOSTS:
+                raise RegistrationError(
+                    error="invalid_redirect_uri",
+                    error_description=(
+                        f"redirect_uri host '{host}' is not allowed on this server. "
+                        "Set ALLOWED_REDIRECT_HOSTS in .env to permit it."
+                    ),
+                )
         store.save_client(OAUTH_STORE_DB, client_info)
 
     async def authorize(self, client: OAuthClientInformationFull, params: AuthorizationParams) -> str:

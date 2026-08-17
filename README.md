@@ -1,5 +1,3 @@
-<div align="center">
-
 ```
 ██╗   ██╗ █████╗ ██╗   ██╗██╗  ████████╗███████╗██╗  ██╗
 ██║   ██║██╔══██╗██║   ██║██║  ╚══██╔══╝██╔════╝╚██╗██╔╝
@@ -7,11 +5,9 @@
 ╚██╗ ██╔╝██╔══██║██║   ██║██║     ██║   ██╔══╝   ██╔██╗ 
  ╚████╔╝ ██║  ██║╚██████╔╝███████╗██║   ███████╗██╔╝ ██╗
   ╚═══╝  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝   ╚══════╝╚═╝  ╚═╝
+No Cloud. No Subscriptions. Local-First.
+Your Obsidian vault in any MCP client.
 ```
-
-*Your Obsidian vault in any MCP client. No Cloud. No Subscriptions. Local First.*
-
-</div>
 
 ---
 ## VAULTEX
@@ -22,6 +18,57 @@ access. It is deliberately **not** a `read_file` / `write_file` /
 `list_directory` server: every tool goes through a shared path-safety layer
 that blocks traversal outside the vault and can hide entire top-level areas
 (e.g. client/employer work) from a given server instance.
+
+## Features
+
+- **Meaningful operations, not raw filesystem access** — search, read a note,
+  save a decision, gather everything about a project; no generic
+  `read_file`/`write_file`/`list_directory` tools.
+- **Path-safety by construction** — every tool routes through a shared
+  boundary that blocks `..` traversal and can hide entire top-level folders
+  (e.g. client/employer work) per server instance.
+- **13 built-in tools** spanning search, app ideas, project context,
+  architecture decisions, and brainstorm capture — see "Available tools"
+  below.
+- **Folder taxonomy** — map your vault's own folders (or scaffold PARA) once
+  via `onboard.py`; define custom categories that become their own
+  `get`/`create` tools automatically at startup.
+- **Local semantic search** — optional embeddings index (`index_vault.py`),
+  runs entirely on your machine, no cloud calls.
+- **Two deployment paths** — fully local with no Docker/Tailscale (Path A),
+  or self-hosted with a bundled Tailscale sidecar for remote access from
+  Claude web/mobile (Path B).
+- **Self-hosted OAuth 2.1** — `server.py` is its own single-user
+  authorization server; no third-party gateway needed for remote clients.
+- **Read-only mode** — `READ_ONLY=true` removes write tools from the tool
+  list entirely, not just blocks them at call time.
+- **No cloud, no subscriptions** — your vault stays on your machine or your
+  own tailnet.
+
+## Easy install
+
+Don't want to work through the manual steps below? Run one command and
+answer a few prompts — it does the rest for you:
+
+```bash
+git clone https://github.com/jysnctcutn/vaultex.git
+python3 install.py   # macOS/Linux
+python install.py    # Windows
+```
+
+It walks through everything "Quick start" covers by hand:
+- Points at an existing vault, or creates one
+- Choose Path A (this machine only) or Path B (also reachable from Claude
+  web/mobile)
+- Installs dependencies — venv + pip for Path A, Docker + Tailscale for
+  Path B
+- Sets up your folder taxonomy: guided, a sensible default, or skip for now
+- Builds the semantic-search index automatically
+- Prints your access token and, on Path A, offers to start the server
+  right away
+
+Prefer doing it by hand, or want to see exactly what it automates? The
+stages below are what it runs under the hood.
 
 ## Quick start
 
@@ -112,7 +159,9 @@ docker compose up -d --build
 
 # 2. One-time: enable Funnel so the container is reachable over the public
 #    internet. Prints your URL, e.g. https://vaultex.<your-tailnet>.ts.net
-docker compose exec tailscale tailscale funnel 8000
+#    --bg is required — without it, Funnel turns off as soon as this
+#    command's session ends instead of persisting in the background.
+docker compose exec tailscale tailscale funnel --bg 8000
 
 # 3. Didn't run stage 3 (onboard.py) locally? Do it here instead — same
 #    effect, writes to the same taxonomy.json:
@@ -227,6 +276,7 @@ take precedence, so `FOO=bar python3 server.py` works for one-offs):
 | `OAUTH_ISSUER_URL` | *(unset)* | Set only for remote deployments, e.g. `https://<host>.<tailnet>.ts.net` — enables the self-hosted OAuth 2.1 flow. Unset = today's bearer-token-only behavior, no OAuth routes registered at all |
 | `AUTHORIZE_PASSWORD` | *(required if `OAUTH_ISSUER_URL` is set)* | Gates the `/login` consent screen — the single password that authorizes an OAuth client |
 | `OAUTH_STORE_DB` | `./oauth_store.db` | Override where registered clients, authorization codes, and tokens are persisted |
+| `ALLOWED_REDIRECT_HOSTS` | `claude.ai` | Comma-separated hosts an OAuth client's `redirect_uri` must match to complete registration — dynamic client registration is unauthenticated by spec, so this is what stops a random internet client from registering at all |
 
 ## Running
 
@@ -244,6 +294,13 @@ embeddings index — see "Quick start" above for the exact command in each
 path (`--full` forces a complete re-index instead of the incremental
 default). Produces `vault_embeddings.db`, which stores raw vault text and is
 git-ignored on purpose — never commit it.
+
+Once that index exists, every write tool (`save_decision`,
+`save_brainstorm`, `create_app_idea`, `update_feature`, and any custom
+category's `create_<key>_note`) re-embeds the note it just wrote, so the
+index stays current automatically — you only need to rerun `index_vault.py`
+by hand for edits made outside these tools (e.g. editing directly in
+Obsidian) or for the very first build.
 
 ## Available tools
 
@@ -360,3 +417,7 @@ stack at the same time against the same vault: SQLite expects one writer.
   reconnect after the sidecar restarts. `tailscale funnel status` inside the
   container will already say "on"; the public URL just needs a moment to
   catch up. No action needed, just retry.
+
+## License
+
+[MIT](LICENSE) — do what you want with it.

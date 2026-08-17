@@ -4,21 +4,12 @@ import sqlite3
 from pathlib import Path
 
 from ..config import EMBEDDINGS_DB_PATH, EXCLUDED_AREAS, VAULT_PATH, logger
+from ..embeddings import _SEMANTIC_DEPS_AVAILABLE, get_model
 from ..mcp_app import mcp
 from ..vault import iter_markdown, read, safe_path, top_level_area
 
-try:
+if _SEMANTIC_DEPS_AVAILABLE:
     import sqlite_vec
-    from sentence_transformers import SentenceTransformer
-    _SEMANTIC_DEPS_AVAILABLE = True
-except ImportError:
-    _SEMANTIC_DEPS_AVAILABLE = False
-
-EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"
-# Loaded once on first semantic_search_vaultex call, then cached — kept
-# lazy (rather than at import time) so a server without semantic search set
-# up yet still starts cleanly.
-_embed_model = None
 
 
 @mcp.tool()
@@ -84,10 +75,7 @@ def semantic_search_vaultex(query: str, limit: int = 10) -> list[dict]:
             "Run `python3 index_vault.py` first to build it."
         )
 
-    global _embed_model
-    if _embed_model is None:
-        _embed_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-    query_embedding = _embed_model.encode(
+    query_embedding = get_model().encode(
         f"Represent this sentence for searching relevant passages: {query}",
         normalize_embeddings=True,
     )
