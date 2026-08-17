@@ -1,0 +1,18 @@
+node_modules/
+.venv/
+.env
+
+__pycache__/
+*.pyc
+
+server.log
+*.log
+CLAUDE.md
+# Contains raw text chunks from your actual vault notes — never commit.
+vault_embeddings.db
+# Holds live OAuth client registrations and issued tokens — never commit.
+oauth_store.db
+# Personal/deployment-specific folder-role mapping — same treatment as .env.
+taxonomy.json
+.env
+.DS_Store

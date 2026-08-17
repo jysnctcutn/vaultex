@@ -1,0 +1,65 @@
+# Bundled self-host deployment: Vaultex + a Tailscale sidecar, so remote
+# (web/mobile) access needs nothing installed on the host besides Docker.
+#
+# One-time setup after `docker compose up -d`:
+#   1. Check the sidecar logged in: `docker compose logs tailscale`
+#   2. Enable Funnel (public HTTPS) for the MCP port, once — the config
+#      persists in the tailscale-state volume across restarts, so this is a
+#      one-time step, not something you repeat on every `up`:
+#        docker compose exec tailscale tailscale funnel 8000
+#   3. Note the printed https://<hostname>.<tailnet>.ts.net URL — that's your
+#      OAUTH_ISSUER_URL (set it in .env, then `docker compose up -d --build`
+#      again so vaultex picks it up).
+#
+# Reachability is a Tailscale concern, not this compose file's — it's your
+# own tailnet, your own TS_AUTHKEY (Tailscale admin console), nothing routes
+# through anyone else's infrastructure. A technical user can strip this
+# sidecar out entirely and front the vaultex service with their own reverse
+# proxy/VPN instead; network_mode: service:tailscale below is the only line
+# that ties them together.
+
+services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: vaultex
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_HOSTNAME: vaultex
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_AUTH_ONCE: "true"
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+
+  vaultex:
+    build: .
+    init: true   # plain `python3 server.py` as PID 1 can't reap zombie
+                 # processes on its own; this runs tini ahead of it so
+                 # `docker compose down`/container stop works cleanly
+    network_mode: service:tailscale
+    depends_on:
+      - tailscale
+    env_file: .env
+    environment:
+      VAULTEX_PATH: /vault
+    volumes:
+      - ${VAULTEX_PATH}:/vault
+      # Bind-mounted (not a named volume) so these are the SAME files
+      # `python3 server.py` reads/writes when run locally, not a separate
+      # copy — running both at once against the same vault isn't a
+      # supported pattern (SQLite, single writer at a time), but the
+      # index/store built by either one is what the other sees.
+      - ./vault_embeddings.db:/app/vault_embeddings.db
+      - ./oauth_store.db:/app/oauth_store.db
+      # Same reasoning as .env below: env_file only injects vars at
+      # container start, it doesn't put the file itself in the container's
+      # filesystem — bind-mount it so `docker compose exec -it vaultex
+      # python3 onboard.py` has somewhere durable to write.
+      - ./.env:/app/.env
+      - ./taxonomy.json:/app/taxonomy.json
+    restart: unless-stopped
+
+volumes:
+  tailscale-state:

@@ -1,0 +1,6 @@
+mcp>=2.0.0
+uvicorn>=0.52.0
+starlette>=1.6.0
+sentence-transformers>=5.7.0
+sqlite-vec>=0.1.9
+python-dotenv>=1.0.0
