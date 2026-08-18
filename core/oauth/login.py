@@ -31,10 +31,11 @@ def park_pending_login(client: OAuthClientInformationFull, params: Authorization
 
 
 # DCR is unauthenticated by spec, so nothing stops a stranger from parking
-# their own login and hammering this password field — the ALLOWED_REDIRECT_HOSTS
-# check in provider.py stops them from ever *completing* a flow, but not
-# from guessing. Two independent caps, in-memory like _pending_logins above
-# (same "lost on restart is fine" reasoning — this is a single-user server):
+# their own login and hammering this password field. The
+# ALLOWED_REDIRECT_HOSTS check in provider.py stops them from ever
+# *completing* a flow, but not from guessing. Two independent caps below,
+# in-memory like _pending_logins above (same "lost on restart is fine"
+# reasoning, since this is a single-user server):
 _MAX_ATTEMPTS_PER_LOGIN = 5
 _MAX_ATTEMPTS_PER_IP = 10
 _IP_LOCKOUT_WINDOW = 900  # seconds

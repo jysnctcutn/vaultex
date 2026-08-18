@@ -10,6 +10,10 @@ precedence over `.env`, so a one-off `FOO=bar python3 server.py` still works.
     EXCLUDED_AREAS=          # e.g. "01-Professional" to hide client/employer work
     READ_ONLY=false          # true = only read-style tools are registered at all
     LOG_LEVEL=info           # set to "debug" for verbose output
+    RATE_LIMIT_MAX_REQUESTS=120   # requests allowed per IP per RATE_LIMIT_WINDOW_SECONDS
+    RATE_LIMIT_WINDOW_SECONDS=60  # sliding window size, in seconds
+    AUTO_LINK_ON_SAVE=true        # append related-notes links to brand-new notes
+                                    # (no-op unless semantic search is set up)
     OAUTH_ISSUER_URL=        # set only for Docker/Tailscale remote deployments —
                               # e.g. https://<host>.<tailnet>.ts.net — enables the
                               # self-hosted OAuth 2.1 flow; unset = today's
@@ -56,12 +60,36 @@ try:
 except ValueError:
     raise SystemExit(f"REINDEX_INTERVAL_SECONDS must be an integer, got: {_REINDEX_INTERVAL_RAW!r}")
 
+# OWASP AP1 (Unrestricted Resource Consumption): every request is capped
+# per source IP on a sliding window, regardless of which tool it targets.
+# This gives a leaked or over-shared MCP_AUTH_TOKEN (or a valid OAuth
+# session) a hard ceiling on how much it can hit the
+# embedding-cost-bearing search tools or anything else.
+_RATE_LIMIT_MAX_RAW = os.environ.get("RATE_LIMIT_MAX_REQUESTS", "120")
+try:
+    RATE_LIMIT_MAX_REQUESTS = int(_RATE_LIMIT_MAX_RAW)
+except ValueError:
+    raise SystemExit(f"RATE_LIMIT_MAX_REQUESTS must be an integer, got: {_RATE_LIMIT_MAX_RAW!r}")
+
+_RATE_LIMIT_WINDOW_RAW = os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60")
+try:
+    RATE_LIMIT_WINDOW_SECONDS = int(_RATE_LIMIT_WINDOW_RAW)
+except ValueError:
+    raise SystemExit(f"RATE_LIMIT_WINDOW_SECONDS must be an integer, got: {_RATE_LIMIT_WINDOW_RAW!r}")
+
 # Top-level folder names this server instance refuses to touch at all.
 # Use this to run a second, restricted instance for non-Claude / personal
 # AI accounts that should never see 01-Professional (client/employer work).
 EXCLUDED_AREAS = {
     a.strip() for a in os.environ.get("EXCLUDED_AREAS", "").split(",") if a.strip()
 }
+
+# Auto-link gate for core/vault.py's write() hook, which appends a
+# "## Related notes" section to brand-new notes once a semantic index
+# exists for this vault. The false-positive risk is already small (new
+# notes only, conservative distance threshold), but this is a full off
+# switch that needs no change to any write tool's signature.
+AUTO_LINK_ON_SAVE = os.environ.get("AUTO_LINK_ON_SAVE", "true").strip().lower() in {"1", "true", "yes"}
 
 # Phase 2 of the security progression: when true, write-capable tools are
 # never registered at all (they won't even appear in tools/list), not just

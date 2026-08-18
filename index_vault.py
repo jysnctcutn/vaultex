@@ -11,10 +11,10 @@ Run:
     python3 index_vault.py                # incremental: only changed notes
     python3 index_vault.py --full         # re-embed everything from scratch
 
-The resulting vault_embeddings.db is vault-wide (no EXCLUDED_AREAS filtering
-here) — area restrictions are applied at query time in server.py, the same
-way _iter_markdown() filters keyword search, so one embeddings db can serve
-both a full and a restricted server instance.
+The resulting vault_embeddings.db is vault-wide -- no EXCLUDED_AREAS
+filtering happens here. Area restrictions are applied at query time
+instead (the same way iter_markdown() filters keyword search), so one
+embeddings db can serve both a full and a restricted server instance.
 """
 
 import argparse
@@ -66,8 +66,8 @@ def main() -> None:
 
     if args.full:
         # Bypasses incremental_sweep() deliberately: --full re-embeds every
-        # file unconditionally and (same as before this refactor) doesn't
-        # attempt stale-entry cleanup, since it never looks at what's
+        # file unconditionally. It doesn't attempt stale-entry cleanup
+        # (same as before this refactor), since it never looks at what's
         # currently stored.
         conn = connect(db_path)
         model = get_model()

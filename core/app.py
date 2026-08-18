@@ -9,24 +9,31 @@ from . import tools  # noqa: F401  (import registers every @mcp.tool())
 from .config import EMBEDDINGS_DB_PATH, HOST, OAUTH_ISSUER_URL, REINDEX_INTERVAL_SECONDS, VAULT_PATH
 from .embeddings import _SEMANTIC_DEPS_AVAILABLE, periodic_reindex
 from .mcp_app import mcp
-from .middleware import BearerAuthMiddleware, SecurityHeadersMiddleware
+from .middleware import BearerAuthMiddleware, RateLimitMiddleware, SecurityHeadersMiddleware
 
 
 def build_app() -> Starlette:
     app = mcp.streamable_http_app(host=HOST)
 
     if not OAUTH_ISSUER_URL:
-        # No OAuth configured: fall back to the original hand-rolled bearer
-        # check. Added first = innermost, so it still sees requests that
-        # fail auth and attaches headers to the 401 response too.
+        # No OAuth configured, so fall back to the original hand-rolled
+        # bearer check. Added first, making it the innermost middleware --
+        # SecurityHeadersMiddleware (added below) wraps around it, so
+        # failed-auth responses still get security headers attached.
         app.add_middleware(BearerAuthMiddleware)
     # With OAuth configured, mcp_app.py already wired auth_server_provider/
     # token_verifier into the MCPServer instance, so the SDK's own
-    # RequireAuthMiddleware/BearerAuthBackend guards /mcp instead — the OAuth
-    # issuance routes (/authorize, /token, /register, /revoke, /login,
-    # /.well-known/oauth-authorization-server) stay public by design.
+    # RequireAuthMiddleware/BearerAuthBackend guards /mcp instead. The
+    # OAuth issuance routes (/authorize, /token, /register, /revoke,
+    # /login, /.well-known/oauth-authorization-server) stay public by design.
 
     app.add_middleware(SecurityHeadersMiddleware)
+
+    # Added last, making it the outermost middleware, so a flood is capped
+    # before it reaches auth or route handling at all. This covers both a
+    # guessing attack against BearerAuthMiddleware and a leaked/over-shared
+    # token hammering the expensive search tools once past auth.
+    app.add_middleware(RateLimitMiddleware)
 
     # Only start the periodic reindex sweep if semantic search has already
     # been opted into (index built at least once) — same no-op-until-opted-in
@@ -34,10 +41,10 @@ def build_app() -> Starlette:
     # startup, not re-polled.
     if _SEMANTIC_DEPS_AVAILABLE and EMBEDDINGS_DB_PATH.exists():
         # mcp.streamable_http_app() already built this app with its own
-        # lifespan (the StreamableHTTP session manager's startup/shutdown) —
-        # this Starlette version only accepts `lifespan=` at construction,
-        # with no public method to add another handler after the fact, so
-        # the supported way to layer one on is replacing the router's
+        # lifespan (the StreamableHTTP session manager's startup/shutdown).
+        # This Starlette version only accepts `lifespan=` at construction,
+        # with no public method to add another handler afterward. So the
+        # supported way to layer one on is replacing the router's
         # lifespan_context with a wrapper that still enters/exits the
         # original.
         original_lifespan = app.router.lifespan_context

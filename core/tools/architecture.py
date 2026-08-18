@@ -57,7 +57,7 @@ def save_decision(title: str, content: str, professional: bool = False,
         if not project_name:
             raise ValueError("project_name is required when professional=False")
         root = require_role(BUILDER_PROJECTS, "builder_projects")
-        path = safe_path(root / project_name / f"Decision - {slug(title)}.md")
+        path = safe_path(root / project_name / f"Decision - {slug(title, 'Decision - ')}.md")
     return write(path, content, overwrite=overwrite)
 
 

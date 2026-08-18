@@ -5,13 +5,13 @@
 ╚██╗ ██╔╝██╔══██║██║   ██║██║     ██║   ██╔══╝   ██╔██╗ 
  ╚████╔╝ ██║  ██║╚██████╔╝███████╗██║   ███████╗██╔╝ ██╗
   ╚═══╝  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝   ╚══════╝╚═╝  ╚═╝
-No Cloud. No Subscriptions. 
 Local-first and free for individuals.
-Your Obsidian vault in any MCP client.
+No Cloud. No Subscriptions. 
+Your Obsidian/MD vault in any MCP client.
 ```
 
 ---
-## VAULTEX
+## VAULTEX MCP
 Exposes an Obsidian vault to AI clients (Claude, GPT, other MCP-speaking
 agents) as a set of *meaningful* operations — search, read a note, save a
 decision, gather everything about a project — rather than raw filesystem
@@ -93,6 +93,34 @@ Path A (local only) or Path B (self-hosted, reachable remotely).
 | Python 3 | required | not required (only if you want `onboard.py` to run outside the container — see stage 3) |
 | Docker Desktop | — | required |
 | A free [Tailscale](https://tailscale.com) account | — | required |
+
+#### Hardware requirements
+
+Vaultex is deliberately light — it's a small Python server plus a local
+keyword/embeddings index, not a model host. No GPU is used or needed;
+semantic search runs on CPU via a small (~130MB) embedding model
+(`BAAI/bge-small-en-v1.5`, 384 dimensions).
+
+| | Minimum | Recommended |
+|---|---|---|
+| CPU | Any x86_64/ARM64, 2 cores | 2+ cores (faster = quicker `index_vault.py` runs) |
+| RAM | 2GB free | 4GB free |
+| Disk (Path A, bare `venv`) | ~1-2GB (deps + model + SQLite indexes), plus your vault's own size | Same, with headroom for vault growth |
+| Disk (Path B, Docker image) | ~1.4-2GB | Same, with headroom for vault growth |
+| GPU | None required | None required |
+| Network | None for Path A (fully local) | Path B adds Docker + a Tailscale tunnel — any always-on machine (a spare laptop, mini PC, or NAS capable of running Docker) works |
+
+In practice this runs comfortably on something as modest as a Raspberry Pi
+4 (4GB) or an old laptop repurposed as a home server — indexing a large
+vault will just take longer on weaker CPUs. RAM is the main constraint: the
+embedding model plus `sentence-transformers`/`torch` overhead is the bulk
+of the footprint, not the vault itself.
+
+The Dockerfile pins the CPU-only `torch` wheel (`--index-url
+https://download.pytorch.org/whl/cpu`) before installing the rest of
+`requirements.txt`. Without that, `pip` defaults to the CUDA-enabled build
+on Linux and drags in ~3.5GB of unused `nvidia`/`triton` packages — this
+app is CPU-only and never touches a GPU, so that build brings no benefit.
 
 ### 2. Configure `.env`
 
@@ -285,7 +313,9 @@ onboard.py              Interactive taxonomy.json setup wizard — see "Folder t
 core/
   config.py            Env vars, startup validation, logging setup
   taxonomy.py          Loads taxonomy.json: role paths + custom category definitions
-  vault.py             Path-safety boundary: safe_path, iter_markdown, read/write, area roots
+  vault.py             Path-safety boundary: safe_path, iter_markdown, read/write, area roots;
+                       also auto-linking (_auto_link) and placement inference (infer_area)
+  frontmatter.py       Minimal YAML frontmatter split/join, used by tools/tags.py
   mcp_app.py           The MCPServer instance, OAuth wiring, write_tool/register_tool gates
   middleware.py        Bearer-token auth (non-OAuth fallback) + baseline security headers
   app.py               Wires tools + middleware into the Starlette ASGI app
@@ -300,6 +330,7 @@ core/
     architecture.py    get_architecture_decisions, save_decision,
                        get_tech_analysis_history, get_solution_architecture_context
     capture.py         save_brainstorm
+    tags.py            get_tags, update_frontmatter
     custom.py          Dynamically registers a get/create pair per taxonomy.json custom category
 index_vault.py         Standalone script: builds/refreshes the local semantic-search index
 Dockerfile              Image for the vaultex service
@@ -325,6 +356,9 @@ take precedence, so `FOO=bar python3 server.py` works for one-offs):
 | `READ_ONLY` | `false` | `true` = write tools aren't even registered (not just blocked at call time) |
 | `LOG_LEVEL` | `info` | Set to `debug` for verbose output (e.g. which files search skips and why) |
 | `VAULT_EMBEDDINGS_DB` | `./vault_embeddings.db` | Override the semantic-search index location |
+| `AUTO_LINK_ON_SAVE` | `true` | `false` disables the automatic "## Related notes" section on brand-new notes (no-op either way until a semantic index exists) |
+| `RATE_LIMIT_MAX_REQUESTS` | `120` | Requests allowed per source IP per `RATE_LIMIT_WINDOW_SECONDS` |
+| `RATE_LIMIT_WINDOW_SECONDS` | `60` | Sliding window size, in seconds, for the request-rate cap |
 | `OAUTH_ISSUER_URL` | *(unset)* | Set only for remote deployments, e.g. `https://<host>.<tailnet>.ts.net` — enables the self-hosted OAuth 2.1 flow. Unset = today's bearer-token-only behavior, no OAuth routes registered at all |
 | `AUTHORIZE_PASSWORD` | *(required if `OAUTH_ISSUER_URL` is set)* | Gates the `/login` consent screen — the single password that authorizes an OAuth client |
 | `OAUTH_STORE_DB` | `./oauth_store.db` | Override where registered clients, authorization codes, and tokens are persisted |
@@ -354,6 +388,14 @@ index stays current automatically — you only need to rerun `index_vault.py`
 by hand for edits made outside these tools (e.g. editing directly in
 Obsidian) or for the very first build.
 
+It also unlocks two more behaviors, both on brand-new notes only (never on
+an edit to an existing one): a "## Related notes" section gets appended
+linking to close semantic matches (`AUTO_LINK_ON_SAVE=false` to disable),
+and `save_brainstorm` routes near related notes instead of always landing
+in the inbox when no explicit `area` is given — raising a clear error
+naming the candidates if existing notes disagree on where it belongs
+rather than guessing.
+
 ## Available tools
 
 | Tool | Read/Write | What it does |
@@ -370,13 +412,22 @@ Obsidian) or for the very first build.
 | `save_decision` | write | Save an architecture/product decision note |
 | `get_tech_analysis_history` | read | List tech-analysis notes, optionally filtered by project |
 | `get_solution_architecture_context` | read | A project's notes + matching tech-analysis + architecture notes |
-| `save_brainstorm` | write | Save a brainstorm/conversation conclusion, default the configured `inbox` folder |
+| `save_brainstorm` | write | Save a brainstorm/conversation conclusion; auto-routed near related notes if a semantic index exists, else the configured `inbox` folder |
+| `get_tags` | read | A note's frontmatter `tags:` array plus inline `#tag` mentions in the body |
+| `update_frontmatter` | write | Create or update a note's YAML frontmatter (any property, not just tags); never touches the body |
 
-8 of these tools (everything except `read_note`, `search_vaultex`,
+8 of the first 13 tools (everything except `read_note`, `search_vaultex`,
 `semantic_search_vaultex`, and `save_brainstorm`) resolve through
 `taxonomy.json` — see "Folder taxonomy" below. Any custom categories from
 `taxonomy.json` add their own `get_<key>`/`create_<key>_note` tools to this
-list at server startup.
+list at server startup. `get_tags`/`update_frontmatter` work on any note by
+path and don't go through `taxonomy.json` at all.
+
+New notes created by any write tool above get an automatic "## Related
+notes" section linking to close semantic matches, and `save_brainstorm`
+auto-routes to sit next to related notes rather than always landing in the
+inbox — both no-ops until a semantic index exists (`index_vault.py`), and
+both configurable/disableable (see "Configuration reference").
 
 ## Folder taxonomy
 
@@ -425,6 +476,14 @@ edit.
   browser OAuth flow.
 - **Read-only mode**: `READ_ONLY=true` removes write tools from the tool list
   entirely, not just from what they're allowed to do.
+- **Rate limiting**: every request is capped per source IP on a sliding
+  window (`RATE_LIMIT_MAX_REQUESTS` per `RATE_LIMIT_WINDOW_SECONDS`, default
+  120/60s) — applied ahead of auth, so both a bearer-token guessing attempt
+  and a leaked/over-shared token hammering the embedding-cost-bearing search
+  tools hit a hard ceiling. See `RateLimitMiddleware` in `core/middleware.py`.
+- **Failed-auth logging**: rejected bearer-token requests are logged
+  (source IP + method/path, never the token itself) so a guessing attempt
+  against a Path B deployment leaves a trace.
 
 ### Self-reviewed against OWASP Top 10 (2025)
 
@@ -459,9 +518,28 @@ re-check themselves, not just asserted:
   (`secrets.compare_digest`), PKCE and `state` handled by the MCP SDK's
   authorization layer, per-login-attempt and per-IP lockout on `/login`
   (`core/oauth/login.py`), and refresh-token rotation on every use.
+- **No unrestricted resource consumption** — every request is rate-limited
+  per source IP (`RateLimitMiddleware`, see "Security model" above), closing
+  off unthrottled abuse of the embedding-cost-bearing search tools.
+- **No known-vulnerable dependencies** — `pip-audit` runs against
+  `requirements.txt` on every push/PR; zero known vulnerabilities as of the
+  last run.
 
 This is a self-review, not an independent third-party audit — treat it as a
 starting point for your own risk assessment, not a certification.
+
+### CI and pre-commit gates
+
+- **`pip-audit`** runs on every push/PR (`.github/workflows/security.yml`),
+  checking `requirements.txt` against known-vulnerability databases.
+- **`gitleaks`** scans for committed secrets both in CI (same workflow) and
+  locally: run `pip install pre-commit && pre-commit install` once to catch a
+  secret before it's committed at all, not just after it's pushed.
+- **`ruff`** lints on every push/PR (`.github/workflows/lint.yml`) and
+  locally via the same pre-commit hook — pyflakes + pycodestyle-errors only
+  (`ruff.toml`), so it catches real mistakes (unused imports, undefined
+  names) rather than bikeshedding style. No test suite exists yet, so
+  there's no test gate to wire in — this is deliberately just the linter.
 
 Deployment is meant to progress in phases: local-only, then tunneled
 read-only, then tunneled read/write once trusted, then agent automation on

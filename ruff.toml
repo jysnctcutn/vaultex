@@ -1,0 +1,9 @@
+line-length = 110
+
+[lint]
+# Pyflakes (F) + pycodestyle errors (E) — catches real bugs (unused
+# imports, undefined names, unused variables) rather than bikeshedding
+# style. Deliberately not a wider preset: broad "ALL"-style rule sets
+# fight the codebase's existing conventions instead of catching mistakes.
+select = ["E", "F"]
+ignore = ["E501"]  # line length not enforced here; not a correctness concern

@@ -38,7 +38,7 @@ def _make_create_fn(category: CustomCategory):
     def _create(title: str, content: str, overwrite: bool = False) -> str:
         if category.required_sections:
             verify_sections(content, category.required_sections)
-        name = f"{category.prefix}{slug(title)}" if category.prefix else slug(title)
+        name = f"{category.prefix}{slug(title, category.prefix)}" if category.prefix else slug(title)
         path = safe_path(folder / f"{name}.md")
         return write(path, content, overwrite=overwrite)
 

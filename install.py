@@ -296,10 +296,10 @@ def step_summary(path_choice: int, taxonomy_configured: bool) -> None:
 
 
 def main() -> None:
-    # Without this, our own print()s can appear out of order relative to
+    # Without this, our print()s can appear out of order relative to
     # subprocess output when stdout isn't a tty (piped, redirected to a
-    # log file, etc.) — the child writes straight to the inherited fd
-    # while our prints sit in a block buffer until it fills.
+    # log file, etc.). The child process writes straight to the inherited
+    # fd, while our prints sit in a block buffer until it fills.
     sys.stdout.reconfigure(line_buffering=True)
 
     print("Vaultex — Interactive Installer\n")
