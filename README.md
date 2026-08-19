@@ -12,8 +12,6 @@ Your Obsidian/MD vault in any MCP client.
 
 ---
 
-![Vaultex demo](./vaultex.gif)
-
 ## VAULTEX MCP
 Exposes an Obsidian vault to AI clients (Claude, GPT, other MCP-speaking
 agents) as a set of *meaningful* operations — search, read a note, save a
@@ -23,6 +21,7 @@ access. It is deliberately **not** a `read_file` / `write_file` /
 that blocks traversal outside the vault and can hide entire top-level areas
 (e.g. client/employer work) from a given server instance.
 
+![Vaultex demo](./vaultex.gif)
 ## Features
 
 - **Meaningful operations, not raw filesystem access** — search, read a note,
@@ -70,6 +69,12 @@ It walks through everything "Quick start" covers by hand:
 - Builds the semantic-search index automatically
 - Prints your access token and, on Path A, offers to start the server
   right away
+
+Once it's running, connect your client — see [Connecting AI clients (Claude,
+ChatGPT, Grok)](#connecting-ai-clients-claude-chatgpt-grok) below.
+
+> **Important:** Custom connectors on ChatGPT requires a paid plan (Plus or
+> above) — the free tier doesn't support them.
 
 Prefer doing it by hand, or want to see exactly what it automates? The
 stages below are what it runs under the hood.
@@ -229,6 +234,22 @@ Restarting later is just `docker compose up -d` (no `--build` unless you
 changed the code) — the vault mount, the search index, the OAuth store, the
 taxonomy config, and the Funnel config all persist across restarts. See
 "Remote access" below for what to do if something looks stuck.
+
+### Connecting AI clients (Claude, ChatGPT, Grok)
+
+Any MCP-compatible client works the same way once the server is running:
+point it at your `/mcp` URL and either complete the OAuth 2.1 handshake
+(Path B) or supply `Authorization: Bearer <your MCP_AUTH_TOKEN>` (Path A).
+
+- **Claude** (web, mobile, desktop): Settings → Connectors → Add custom
+  connector → paste your `/mcp` URL.
+- **ChatGPT**: Settings → Connectors → Add connector → paste your `/mcp`
+  URL; ChatGPT runs through the same OAuth 2.1 flow.
+- **Grok**: Settings → Connectors (or Tools) → Add MCP connector → same URL.
+
+Menu names shift as these products update — if a step doesn't match what
+you see, look for "Connectors," "Custom connector," or "MCP" in that
+client's settings.
 
 ## Where this fits
 
