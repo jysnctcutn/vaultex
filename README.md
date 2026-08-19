@@ -11,6 +11,9 @@ Your Obsidian/MD vault in any MCP client.
 ```
 
 ---
+
+![Vaultex demo](./vaultex.gif)
+
 ## VAULTEX MCP
 Exposes an Obsidian vault to AI clients (Claude, GPT, other MCP-speaking
 agents) as a set of *meaningful* operations — search, read a note, save a
