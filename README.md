@@ -9,10 +9,15 @@ Local-first and free for individuals.
 No Cloud. No Subscriptions. 
 Your Obsidian/MD vault in any MCP client.
 ```
-
+[![CI](https://github.com/jysnctcutn/vaultex/actions/workflows/ci.yml/badge.svg)](https://github.com/jysnctcutn/vaultex/actions/workflows/ci.yml)&nbsp;&nbsp;
+[![Security](https://github.com/jysnctcutn/vaultex/actions/workflows/security.yml/badge.svg)](https://github.com/jysnctcutn/vaultex/actions/workflows/security.yml)&nbsp;&nbsp;
+[![Lint](https://github.com/jysnctcutn/vaultex/actions/workflows/lint.yml/badge.svg)](https://github.com/jysnctcutn/vaultex/actions/workflows/lint.yml)&nbsp;&nbsp;
+[![License](https://img.shields.io/github/license/jysnctcutn/vaultex)](LICENSE)&nbsp;&nbsp;
+[![Python 3.14](https://img.shields.io/badge/python-3.14-blue?logo=python&logoColor=white)](https://www.python.org/) 
 ---
 
 ## VAULTEX MCP
+
 Exposes an Obsidian vault to AI clients (Claude, GPT, other MCP-speaking
 agents) as a set of *meaningful* operations — search, read a note, save a
 decision, gather everything about a project — rather than raw filesystem
@@ -22,6 +27,20 @@ that blocks traversal outside the vault and can hide entire top-level areas
 (e.g. client/employer work) from a given server instance.
 
 ![Vaultex demo](./vaultex.gif)
+
+**Contents:** [Features](#features) · [Easy install](#easy-install) ·
+[Quick start](#quick-start) ·
+[Connecting AI clients](#connecting-ai-clients-claude-chatgpt-grok) ·
+[Where this fits](#where-this-fits) ·
+[Manual context handover vs. one tool call](#manual-context-handover-vs-one-tool-call) ·
+[How it's laid out](#how-its-laid-out) ·
+[Configuration reference](#configuration-reference) ·
+[Available tools](#available-tools) ·
+[Folder taxonomy](#folder-taxonomy) ·
+[Security model](#security-model) ·
+[Remote access](#remote-access-optional) ·
+[Contributing](#contributing)
+
 ## Features
 
 - **Meaningful operations, not raw filesystem access** — search, read a note,
@@ -357,6 +376,7 @@ core/
     tags.py            get_tags, update_frontmatter
     custom.py          Dynamically registers a get/create pair per taxonomy.json custom category
 index_vault.py         Standalone script: builds/refreshes the local semantic-search index
+tests/                  pytest suite — see "CI and pre-commit gates" below
 Dockerfile              Image for the vaultex service
 docker-compose.yml      vaultex + a bundled Tailscale sidecar — see "Remote access" below
 ```
@@ -489,6 +509,9 @@ edit.
 
 ## Security model
 
+Found a vulnerability? See [SECURITY.md](SECURITY.md) for how to report it
+privately rather than filing a public issue.
+
 - **Path safety**: every tool resolves through `safe_path`/`iter_markdown` in
   `core/vault.py`, which blocks `..` traversal outside the vault and enforces
   `EXCLUDED_AREAS` — a new tool can't accidentally bypass either check.
@@ -562,8 +585,13 @@ starting point for your own risk assessment, not a certification.
 - **`ruff`** lints on every push/PR (`.github/workflows/lint.yml`) and
   locally via the same pre-commit hook — pyflakes + pycodestyle-errors only
   (`ruff.toml`), so it catches real mistakes (unused imports, undefined
-  names) rather than bikeshedding style. No test suite exists yet, so
-  there's no test gate to wire in — this is deliberately just the linter.
+  names) rather than bikeshedding style.
+- **`pytest`** runs on every push/PR (`.github/workflows/ci.yml`) — see
+  `tests/` for what's covered so far: vault path-safety
+  (`safe_path`/`check_area_allowed` — traversal and excluded-area blocking)
+  and the frontmatter split/join round-trip. Run locally with `pytest` from
+  the repo root (needs `requirements.txt` installed, or at minimum
+  `pyyaml` + `python-dotenv` for just these two modules).
 
 Deployment is meant to progress in phases: local-only, then tunneled
 read-only, then tunneled read/write once trusted, then agent automation on
@@ -608,6 +636,12 @@ stack at the same time against the same vault: SQLite expects one writer.
   reconnect after the sidecar restarts. `tailscale funnel status` inside the
   container will already say "on"; the public URL just needs a moment to
   catch up. No action needed, just retry.
+
+## Contributing
+
+Bug reports, feature ideas, and PRs are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md)
+for the dev setup, test policy, and PR checklist. Security issues go through
+[SECURITY.md](SECURITY.md) instead of a public issue.
 
 ## License
 
