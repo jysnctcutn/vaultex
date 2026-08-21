@@ -115,6 +115,13 @@ OAUTH_STORE_DB = Path(
     os.environ.get("OAUTH_STORE_DB", str(BASE_DIR / "oauth_store.db"))
 ).expanduser().resolve()
 
+# Override for tests/multi-instance setups so they don't read or clobber a
+# real, personal taxonomy.json. Default matches every prior release's
+# behavior (BASE_DIR/taxonomy.json).
+TAXONOMY_JSON_PATH = Path(
+    os.environ.get("TAXONOMY_JSON_PATH", str(BASE_DIR / "taxonomy.json"))
+).expanduser().resolve()
+
 # Dynamic client registration (RFC 7591) is open by design — anyone can hit
 # /register — but nothing says the server has to accept just any client.
 # core/oauth/provider.py rejects registrations whose redirect_uri host isn't

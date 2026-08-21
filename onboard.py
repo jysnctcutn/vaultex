@@ -18,6 +18,7 @@ this script.
 
 import argparse
 import json
+import os
 import re
 from pathlib import Path
 
@@ -26,7 +27,7 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
-TAXONOMY_PATH = BASE_DIR / "taxonomy.json"
+TAXONOMY_PATH = Path(os.environ.get("TAXONOMY_JSON_PATH", str(BASE_DIR / "taxonomy.json")))
 
 ROLES = [
     ("builder_ideas", "App/project ideas not yet a project"),
@@ -55,8 +56,6 @@ AUTHOR_TAXONOMY = {
 
 
 def _vault_path() -> Path:
-    import os
-
     raw = os.environ.get("VAULTEX_PATH")
     if not raw:
         raise SystemExit("VAULTEX_PATH isn't set in .env — set that up first (see README Quick start).")

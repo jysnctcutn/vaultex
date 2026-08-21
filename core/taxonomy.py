@@ -12,9 +12,9 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .config import BASE_DIR
+from .config import TAXONOMY_JSON_PATH
 
-TAXONOMY_PATH = BASE_DIR / "taxonomy.json"
+TAXONOMY_PATH = TAXONOMY_JSON_PATH
 
 # Every built-in role key this server understands. onboard.py walks this
 # list; core/vault.py exposes one Path|None constant per entry.

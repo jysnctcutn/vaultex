@@ -51,9 +51,9 @@ that blocks traversal outside the vault and can hide entire top-level areas
 - **Path-safety by construction** — every tool routes through a shared
   boundary that blocks `..` traversal and can hide entire top-level folders
   (e.g. client/employer work) per server instance.
-- **13 built-in tools** spanning search, app ideas, project context,
-  architecture decisions, and brainstorm capture — see "Available tools"
-  below.
+- **16 built-in tools** spanning search, app ideas, project context,
+  architecture decisions, tagging, and brainstorm capture — see "Available
+  tools" below.
 - **Folder taxonomy** — map your vault's own folders (or scaffold PARA) once
   via `onboard.py`; define custom categories that become their own
   `get`/`create` tools automatically at startup.
@@ -164,10 +164,10 @@ only get filled in during Path B, later.
 
 ### 3. (Optional) Set up your folder taxonomy
 
-8 of the 13 tools — the ones that read/write ideas, projects, decisions,
+9 of the 16 tools — the ones that read/write ideas, projects, decisions,
 etc. rather than doing free-form search — need to know which folders in
 *your* vault to use. Skip this stage entirely and the server still runs
-fine: those 8 tools just report "not configured" until you come back to
+fine: those 9 tools just report "not configured" until you come back to
 this. `search_vaultex`, `semantic_search_vaultex`, `read_note`, and
 `save_brainstorm` never need this — they work on any vault immediately.
 
@@ -358,8 +358,9 @@ onboard.py              Interactive taxonomy.json setup wizard — see "Folder t
 core/
   config.py            Env vars, startup validation, logging setup
   taxonomy.py          Loads taxonomy.json: role paths + custom category definitions
-  vault.py             Path-safety boundary: safe_path, iter_markdown, read/write, area roots;
-                       also auto-linking (_auto_link) and placement inference (infer_area)
+  vault.py             Path-safety boundary: safe_path, iter_markdown, read/write, move, area roots;
+                       also auto-linking (_auto_link), placement inference (infer_area),
+                       and per-project subfolder validation (resolve_project_subfolder)
   frontmatter.py       Minimal YAML frontmatter split/join, used by tools/tags.py
   mcp_app.py           The MCPServer instance, OAuth wiring, write_tool/register_tool gates
   middleware.py        Bearer-token auth (non-OAuth fallback) + baseline security headers
@@ -410,6 +411,7 @@ take precedence, so `FOO=bar python3 server.py` works for one-offs):
 | `OAUTH_ISSUER_URL` | *(unset)* | Set only for remote deployments, e.g. `https://<host>.<tailnet>.ts.net` — enables the self-hosted OAuth 2.1 flow. Unset = today's bearer-token-only behavior, no OAuth routes registered at all |
 | `AUTHORIZE_PASSWORD` | *(required if `OAUTH_ISSUER_URL` is set)* | Gates the `/login` consent screen — the single password that authorizes an OAuth client |
 | `OAUTH_STORE_DB` | `./oauth_store.db` | Override where registered clients, authorization codes, and tokens are persisted |
+| `TAXONOMY_JSON_PATH` | `./taxonomy.json` | Override where `taxonomy.json` is read from/written to — mainly for running multiple instances against different taxonomies, or test isolation |
 | `ALLOWED_REDIRECT_HOSTS` | `claude.ai` | Comma-separated hosts an OAuth client's `redirect_uri` must match to complete registration — dynamic client registration is unauthenticated by spec, so this is what stops a random internet client from registering at all |
 
 ## Running
@@ -465,8 +467,9 @@ rather than guessing.
 | `update_frontmatter` | write | Create or update a note's YAML frontmatter (any property, not just tags); never touches the body |
 | `move_note` | write, opt-in | Move/rename a note within the vault — requires `ENABLE_NOTE_MOVE=true` (off by default even in read/write mode); not registered otherwise |
 
-8 of the first 13 tools (everything except `read_note`, `search_vaultex`,
-`semantic_search_vaultex`, and `save_brainstorm`) resolve through
+9 of the 16 tools (everything except `read_note`, `search_vaultex`,
+`semantic_search_vaultex`, `save_brainstorm`, `get_tags`,
+`update_frontmatter`, and `move_note`) resolve through
 `taxonomy.json` — see "Folder taxonomy" below. Any custom categories from
 `taxonomy.json` add their own `get_<key>`/`create_<key>_note` tools to this
 list at server startup. `get_tags`/`update_frontmatter` work on any note by
@@ -490,7 +493,7 @@ both configurable/disableable (see "Configuration reference").
 ## Folder taxonomy
 
 Fresh clone, no `taxonomy.json` yet = a taxonomy-free server. Reads among
-the 8 role-gated tools raise a clear `TaxonomyNotConfigured` error instead
+the 9 role-gated tools raise a clear `TaxonomyNotConfigured` error instead
 of silently returning nothing; writes raise instead of silently creating a
 folder in your vault. Run `python3 onboard.py` to fix that — it:
 
