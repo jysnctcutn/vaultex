@@ -1,6 +1,7 @@
 """Solution Architecture tools (professional area): decisions, gap analysis, full project context."""
 
 from ..mcp_app import mcp, write_tool
+from ..taxonomy import project_subfolders
 from ..vault import (
     BUILDER_PROJECTS,
     PROFESSIONAL_ARCHITECTURE,
@@ -11,8 +12,10 @@ from ..vault import (
     iter_markdown,
     read_capped,
     require_role,
+    resolve_project_subfolder,
     safe_path,
     slug,
+    validate_limit,
     verify_sections,
     write,
 )
@@ -25,6 +28,7 @@ def get_architecture_decisions(project_name: str | None = None, professional: bo
     capped at `limit`. professional=True (default) reads the configured
     professional-decisions folder; professional=False reads the equivalent
     Decisions.md inside a Builder project instead."""
+    validate_limit(limit)
     if professional:
         root_rel = require_role(PROFESSIONAL_DECISIONS, "professional_decisions") if not project_name \
             else require_role(PROFESSIONAL_PROJECTS, "professional_projects") / project_name
@@ -39,11 +43,16 @@ def get_architecture_decisions(project_name: str | None = None, professional: bo
 
 @write_tool
 def save_decision(title: str, content: str, professional: bool = False,
-                   project_name: str | None = None, overwrite: bool = False) -> str:
+                   project_name: str | None = None, subfolder: str | None = None,
+                   overwrite: bool = False) -> str:
     """Save an architecture/product decision note.
 
     professional=True writes to the configured professional-decisions folder.
     professional=False writes into a Builder project's folder (project_name required).
+    subfolder: for a Builder project with subfolders configured in taxonomy.json's
+    project_subfolders (e.g. "architecture"/"legal"/"general"/"archives"),
+    required and must be one of the configured values; omit for a project with
+    none configured, or when professional=True.
     Pass overwrite=True to update an existing note in place instead of erroring.
 
     Content must include a `**Decided:**` and a `**What it means:**` section —
@@ -51,13 +60,16 @@ def save_decision(title: str, content: str, professional: bool = False,
     """
     verify_sections(content, ["**Decided:**", "**What it means:**"])
     if professional:
+        if subfolder is not None:
+            raise ValueError("`subfolder` only applies to Builder projects (professional=False)")
         root = require_role(PROFESSIONAL_DECISIONS, "professional_decisions")
         path = safe_path(root / f"{slug(title)}.md")
     else:
         if not project_name:
             raise ValueError("project_name is required when professional=False")
         root = require_role(BUILDER_PROJECTS, "builder_projects")
-        path = safe_path(root / project_name / f"Decision - {slug(title, 'Decision - ')}.md")
+        resolved = resolve_project_subfolder(project_name, subfolder, project_subfolders.get(project_name))
+        path = safe_path(root / project_name / resolved / f"Decision - {slug(title, 'Decision - ')}.md")
     return write(path, content, overwrite=overwrite)
 
 
@@ -66,6 +78,7 @@ def get_tech_analysis_history(project_name: str | None = None, limit: int = 10) 
     """List tech-analysis notes from the configured professional-tech-analysis
     folder, most-recently modified first, capped at `limit`, optionally
     filtered to those whose filename mentions project_name."""
+    validate_limit(limit)
     root = require_role(PROFESSIONAL_TECH_ANALYSIS, "professional_tech_analysis")
     check_area_allowed(root)
     needle = project_name.lower() if project_name else None
@@ -78,6 +91,7 @@ def get_solution_architecture_context(project_name: str, limit: int = 10) -> dic
     """Gather everything relevant to a Solution Architecture project: the
     project's own notes plus any matching tech-analysis and architecture
     notes, each most-recently modified first and capped at `limit`."""
+    validate_limit(limit)
     projects_root = require_role(PROFESSIONAL_PROJECTS, "professional_projects")
     root_rel = projects_root / project_name
     check_area_allowed(root_rel)

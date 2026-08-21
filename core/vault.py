@@ -1,8 +1,7 @@
 """Vault-relative path helpers: the access-control boundary plus safe read/write.
 
-Deliberately not a read_file/write_file/list_directory server — every tool
-goes through these helpers so the excluded-areas and path-traversal checks
-can't be bypassed by a new tool forgetting to call them.
+Not a read_file/write_file/list_directory server — every tool goes through
+these helpers so a new tool can't forget the excluded-areas/traversal checks.
 """
 
 from collections import Counter
@@ -12,23 +11,20 @@ from .config import AUTO_LINK_ON_SAVE, EMBEDDINGS_DB_PATH, EXCLUDED_AREAS, VAULT
 from .embeddings import (
     _SEMANTIC_DEPS_AVAILABLE,
     connect as _embeddings_connect,
+    delete_path as _delete_path,
     find_related as _find_related,
     get_model,
     index_note as _index_note,
 )
 from .taxonomy import roles
 
-# Cosine-distance cutoff for find_related() lookups, shared by _auto_link()
-# and infer_area() below. Lower means more similar; 0.35 was picked
-# empirically to admit clearly-on-topic matches while rejecting
-# merely-plausible ones. Tune it down for stricter auto-linking/placement,
-# up for looser.
+# Cosine-distance cutoff for find_related(), shared by _auto_link() and
+# infer_area(). Lower = stricter match; 0.35 picked empirically.
 _RELATED_MAX_DISTANCE = 0.35
 
-# Area roots — sourced from taxonomy.json (see core/taxonomy.py), not
-# hardcoded: each is a Path if that role is configured for this vault, or
-# None if it isn't. Use require_role() below to turn an unconfigured role
-# into a clear error instead of a silent no-op / silent folder creation.
+# Sourced from taxonomy.json, not hardcoded: Path if the role is configured
+# for this vault, else None. require_role() below turns None into a clear
+# error instead of a silent no-op or silent folder creation.
 PROFESSIONAL_DECISIONS = roles["professional_decisions"]
 PROFESSIONAL_TECH_ANALYSIS = roles["professional_tech_analysis"]
 PROFESSIONAL_ARCHITECTURE = roles["professional_architecture"]
@@ -43,11 +39,10 @@ def top_level_area(relative: Path) -> str:
 
 
 def check_area_allowed(relative: Path | str) -> Path:
-    """Resolve `relative` against the vault root and enforce both
-    boundaries: the result must stay inside VAULT_PATH, and its top-level
-    folder must not be in EXCLUDED_AREAS. Both checks run against the
-    resolved path, not the literal input string, so an
-    '<allowed>/../<excluded>/...' path can't walk around either rule."""
+    """Resolve `relative` against the vault root and enforce containment
+    (inside VAULT_PATH) plus EXCLUDED_AREAS, both against the resolved
+    path -- not the input string -- so '<allowed>/../<excluded>/...' can't
+    walk around either check."""
     candidate = (VAULT_PATH / relative).resolve()
     if candidate != VAULT_PATH and VAULT_PATH not in candidate.parents:
         raise ValueError(f"Path escapes the vault: {relative}")
@@ -60,10 +55,9 @@ def check_area_allowed(relative: Path | str) -> Path:
 
 
 class TaxonomyNotConfigured(ValueError):
-    """Raised when a tool needs a taxonomy.json role that isn't configured
-    for this vault. Prevents a read tool from silently returning nothing,
-    or a write tool from silently creating a folder shaped for someone
-    else's own vault layout."""
+    """A tool needs a taxonomy.json role that isn't configured for this
+    vault -- avoids a read silently returning nothing, or a write silently
+    creating a folder shaped for someone else's vault layout."""
 
 
 def require_role(path: Path | None, role_key: str) -> Path:
@@ -74,11 +68,26 @@ def require_role(path: Path | None, role_key: str) -> Path:
     return path
 
 
+def resolve_project_subfolder(project_name: str, subfolder: str | None, allowed: list[str] | None) -> str:
+    """`allowed` is taxonomy.py's project_subfolders.get(project_name).
+    Unconfigured (falsy) -- subfolder must be omitted, keeps the flat
+    project-root behavior every project has always had. Configured --
+    subfolder is required, exact match against `allowed` (no case-folding:
+    a mismatch should surface as a clear error, not a silent miss)."""
+    if not allowed:
+        if subfolder is not None:
+            raise ValueError(f"'{project_name}' has no configured subfolders in taxonomy.json; omit `subfolder`.")
+        return ""
+    if subfolder not in allowed:
+        raise ValueError(
+            f"'{project_name}' requires `subfolder` to be one of: {', '.join(allowed)}. Got: {subfolder!r}"
+        )
+    return subfolder
+
+
 def safe_path(relative: Path | str) -> Path:
-    """Resolve a vault-relative path to an absolute one. Blocks paths that
-    escape the vault root entirely and paths landing inside an
-    EXCLUDED_AREAS folder -- see check_area_allowed() for how both checks
-    are enforced against the resolved path rather than the input string."""
+    """Resolve a vault-relative path to an absolute one, enforcing the
+    same containment/EXCLUDED_AREAS checks as check_area_allowed()."""
     return check_area_allowed(relative)
 
 
@@ -99,9 +108,8 @@ def read(path: Path) -> str:
 
 def read_capped(paths, limit: int | None = None) -> list[dict]:
     """Read (path, content) for each markdown path, most-recently-modified
-    first. Caps at `limit` notes if given, so a project with many
-    accumulated notes doesn't blow a single tool response past what a
-    client's context window can hold."""
+    first, capped at `limit` if given -- keeps a large project's response
+    within a client's context window."""
     paths = sorted(paths, key=lambda p: p.stat().st_mtime, reverse=True)
     if limit is not None:
         paths = paths[:limit]
@@ -120,15 +128,26 @@ def write(path: Path, content: str, overwrite: bool) -> str:
     return str(path.relative_to(VAULT_PATH))
 
 
+def move(old_path: Path, new_path: Path, overwrite: bool) -> str:
+    """Move/rename a note. Both paths must already be resolved through
+    safe_path by the caller -- this function only handles the filesystem
+    move and reindex, not path-safety validation."""
+    if not old_path.is_file():
+        raise FileNotFoundError(f"No such note: {old_path.relative_to(VAULT_PATH)}")
+    if new_path.exists() and not overwrite:
+        raise FileExistsError(f"{new_path.relative_to(VAULT_PATH)} already exists; pass overwrite=True")
+    new_path.parent.mkdir(parents=True, exist_ok=True)
+    old_path.rename(new_path)
+    _reindex_move(old_path, new_path)
+    return str(new_path.relative_to(VAULT_PATH))
+
+
 def _auto_link(path: Path, content: str) -> str:
-    """Append a '## Related notes' section linking to close semantic
-    matches. Only fires for brand-new notes -- write()'s is_new gate above
-    means an overwrite never re-triggers this, so it can't duplicate
-    across repeated edits and can't break update_frontmatter's "never
-    touches the body" promise. No-op unless AUTO_LINK_ON_SAVE is enabled
-    and a semantic index already exists for this vault; any lookup
-    failure is logged and swallowed, never blocks the save.
-    """
+    """Append a '## Related notes' section linking close semantic matches.
+    Only fires for brand-new notes (write()'s is_new gate), so it can't
+    duplicate on edits or break update_frontmatter's "never touches the
+    body" promise. No-op without AUTO_LINK_ON_SAVE or an index; lookup
+    failures are logged and swallowed, never block the save."""
     if not AUTO_LINK_ON_SAVE or not _SEMANTIC_DEPS_AVAILABLE or not EMBEDDINGS_DB_PATH.exists():
         return content
     try:
@@ -149,25 +168,21 @@ def _auto_link(path: Path, content: str) -> str:
 
 
 class PlacementAmbiguous(ValueError):
-    """Raised by infer_area() when existing notes split across more than
-    one plausible folder with no clear leader. An MCP tool call has no
-    mid-call prompt to a human, so this surfaces the candidates in the
-    error message instead of guessing. The caller is expected to re-ask
-    the user or retry save_brainstorm with an explicit area=."""
+    """infer_area() found no clear leader among plausible folders. An MCP
+    call can't prompt a human mid-call, so the candidates go in the error
+    message instead -- caller retries save_brainstorm with an explicit
+    area=."""
 
 
 def infer_area(title: str, content: str, default: Path) -> Path:
-    """Infer where a free-form note (save_brainstorm) belongs, by
-    semantic-searching existing notes for title+content and looking at
-    what folder(s) the closest matches already live in.
+    """Infer where a free-form note (save_brainstorm) belongs by
+    semantic-searching for title+content and checking what folder(s) the
+    closest matches live in.
 
-    Returns `default` unchanged -- no inference -- when semantic search
-    isn't opted into for this vault, or when no existing note is a close
-    enough match: never fabricates a new or ambiguously-named folder.
-    Raises PlacementAmbiguous when the closest matches disagree across
-    multiple existing top-level areas with no clear leader, instead of
-    guessing.
-    """
+    Returns `default` unchanged if semantic search isn't opted in or no
+    match is close enough -- never fabricates a folder. Raises
+    PlacementAmbiguous if the closest matches disagree with no clear
+    leader, instead of guessing."""
     if not _SEMANTIC_DEPS_AVAILABLE or not EMBEDDINGS_DB_PATH.exists():
         return default
     try:
@@ -192,20 +207,16 @@ def infer_area(title: str, content: str, default: Path) -> Path:
             f"Pass area=<one of these paths> to save_brainstorm to disambiguate, or "
             f"area='{default}' to use the default inbox."
         )
-    # Route to the single closest match's own parent folder, not just its
-    # top-level area. This puts the note in the right subfolder (e.g.
-    # inside the specific project it relates to), not just the right
-    # top-level bucket.
+    # Closest match's own parent folder, not just its top-level area --
+    # lands in the right project subfolder, not just the right bucket.
     return Path(matches[0]["path"]).parent
 
 
 def _reindex(path: Path) -> None:
-    """Keep the semantic-search index current on every save. Every write
-    tool funnels through write() above, so this one hook covers all of
-    them. It's a no-op if semantic search hasn't been set up yet (run
-    `python3 index_vault.py` once to opt in), and a failure here must
-    never fail the save itself.
-    """
+    """Keep the semantic-search index current on every save -- every write
+    tool funnels through write(), so this one hook covers all of them.
+    No-op until `python3 index_vault.py` has been run once; a failure
+    here must never fail the save itself."""
     if not _SEMANTIC_DEPS_AVAILABLE or not EMBEDDINGS_DB_PATH.exists():
         return
     try:
@@ -219,13 +230,28 @@ def _reindex(path: Path) -> None:
         logger.warning("Semantic reindex failed for %s", path, exc_info=True)
 
 
+def _reindex_move(old_path: Path, new_path: Path) -> None:
+    """Keep the semantic-search index current after move() relocates a
+    note -- purges the vacated old path's chunks, then indexes at the new
+    path. Same no-op/never-fail-the-move contract as _reindex()."""
+    if not _SEMANTIC_DEPS_AVAILABLE or not EMBEDDINGS_DB_PATH.exists():
+        return
+    try:
+        conn = _embeddings_connect(EMBEDDINGS_DB_PATH)
+        try:
+            _delete_path(conn, str(old_path.relative_to(VAULT_PATH)))
+            _index_note(conn, get_model(), VAULT_PATH, new_path)
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        logger.warning("Semantic reindex failed for move %s -> %s", old_path, new_path, exc_info=True)
+
+
 def slug(title: str, prefix: str = "") -> str:
-    """Normalize a note title for use as a filename stem. If `prefix` is
-    the exact string the call site is about to prepend (e.g. "Decision - ",
-    or a taxonomy.json category's configured prefix), any leading
-    occurrence of it already in `title` is stripped first. This stops a
-    caller-supplied title that already includes the type prefix (e.g.
-    copied from an existing note) from ending up doubled once the call
+    """Normalize a note title for use as a filename stem. Strips a leading
+    `prefix` already in `title` (e.g. "Decision - ") first, so a title
+    copied from an existing note doesn't end up doubled once the call
     site prepends its own copy."""
     stripped = title.strip()
     if prefix and stripped.lower().startswith(prefix.lower()):
@@ -234,10 +260,8 @@ def slug(title: str, prefix: str = "") -> str:
 
 
 class VerificationError(ValueError):
-    """Raised when write content fails its structural check. The message
-    tells the calling agent exactly what to fix — the retry loop lives on
-    the caller's side (re-prompt, regenerate, call the tool again), not in
-    this server."""
+    """Write content failed its structural check. Message names what to
+    fix -- the retry loop lives on the caller's side, not this server."""
 
 
 def verify_sections(content: str, required: list[str]) -> None:
@@ -247,3 +271,15 @@ def verify_sections(content: str, required: list[str]) -> None:
             f"Missing required section(s): {', '.join(missing)}. "
             "Regenerate the note with all required sections and call this tool again."
         )
+
+
+MAX_LIMIT = 200
+
+
+def validate_limit(limit: int) -> None:
+    """Every read tool's `limit` param funnels through here. Rejects rather
+    than silently clamps, so a single call can't be forced to read the
+    whole vault -- rate limiting alone only caps call frequency, not
+    per-call cost."""
+    if not isinstance(limit, int) or isinstance(limit, bool) or not (1 <= limit <= MAX_LIMIT):
+        raise ValueError(f"limit must be an integer between 1 and {MAX_LIMIT}, got: {limit!r}")

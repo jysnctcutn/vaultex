@@ -107,9 +107,13 @@ def ask_choice(prompt: str, options: list[str], default: int = 1) -> int:
 
 def run(cmd: list, **kwargs) -> subprocess.CompletedProcess:
     """Streamed (inherits stdout/stderr), raises on failure — matches how
-    long-running installs (pip, docker build) should surface progress."""
+    long-running installs (pip, docker build) should surface progress.
+    Every call site below passes a fixed, list-form command (sys.executable,
+    "docker", venv paths) — never attacker-controlled/shell-interpreted
+    input, so bandit's generic "check subprocess input" warning doesn't
+    apply here."""
     print(f"\n$ {' '.join(str(c) for c in cmd)}")
-    return subprocess.run(cmd, check=True, **kwargs)
+    return subprocess.run(cmd, check=True, **kwargs)  # noqa: S603
 
 
 # --- Step 2: vault path ---
@@ -146,7 +150,8 @@ def _docker_ready() -> bool:
     if shutil.which("docker") is None:
         return False
     try:
-        subprocess.run(["docker", "info"], check=True, capture_output=True)
+        # Fixed command, no shell, no attacker-controlled input.
+        subprocess.run(["docker", "info"], check=True, capture_output=True)  # noqa: S603, S607
         return True
     except (subprocess.CalledProcessError, OSError):
         return False
@@ -181,8 +186,9 @@ def install_path_b() -> None:
     run(["docker", "compose", "up", "-d", "--build"], cwd=BASE_DIR)
 
     print("\nChecking the Tailscale sidecar logged in...")
+    # Fixed command, no shell, no attacker-controlled input.
     status = subprocess.run(
-        ["docker", "compose", "exec", "tailscale", "tailscale", "status"],
+        ["docker", "compose", "exec", "tailscale", "tailscale", "status"],  # noqa: S603, S607
         cwd=BASE_DIR, capture_output=True, text=True,
     )
     if "logged out" in status.stdout.lower() or "invalid key" in (status.stdout + status.stderr).lower():
@@ -337,6 +343,6 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        raise SystemExit("\nCancelled.")
+        raise SystemExit("\nCancelled.") from None
     except subprocess.CalledProcessError as e:
-        raise SystemExit(f"\n{e.cmd} failed with exit code {e.returncode}")
+        raise SystemExit(f"\n{e.cmd} failed with exit code {e.returncode}") from None

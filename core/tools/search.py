@@ -6,7 +6,7 @@ from pathlib import Path
 from ..config import EMBEDDINGS_DB_PATH, EXCLUDED_AREAS, VAULT_PATH, logger
 from ..embeddings import _SEMANTIC_DEPS_AVAILABLE, get_model
 from ..mcp_app import mcp
-from ..vault import iter_markdown, read, safe_path, top_level_area
+from ..vault import iter_markdown, read, safe_path, top_level_area, validate_limit
 
 if _SEMANTIC_DEPS_AVAILABLE:
     import sqlite_vec
@@ -34,6 +34,7 @@ def search_vaultex(query: str, areas: list[str] | None = None, limit: int = 20) 
     ["02-Builder", "03-Knowledge"]. Notes under excluded areas for this
     server instance are never returned regardless of `areas`.
     """
+    validate_limit(limit)
     query_lower = query.lower()
     results: list[dict] = []
     roots = [Path(a) for a in areas] if areas else [Path(".")]
@@ -64,6 +65,7 @@ def semantic_search_vaultex(query: str, limit: int = 10) -> list[dict]:
     Requires vault_embeddings.db to exist; run `python3 index_vault.py`
     first (and after significant vault edits) to build/refresh it.
     """
+    validate_limit(limit)
     if not _SEMANTIC_DEPS_AVAILABLE:
         raise RuntimeError(
             "Semantic search dependencies aren't installed. "

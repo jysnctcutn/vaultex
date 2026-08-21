@@ -9,11 +9,11 @@ Local-first and free for individuals.
 No Cloud. No Subscriptions. 
 Your Obsidian/MD vault in any MCP client.
 ```
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14169/badge)](https://www.bestpractices.dev/projects/14169)&nbsp;&nbsp;
-[![CI](https://github.com/jysnctcutn/vaultex/actions/workflows/ci.yml/badge.svg)](https://github.com/jysnctcutn/vaultex/actions/workflows/ci.yml)&nbsp;&nbsp;
-[![Security](https://github.com/jysnctcutn/vaultex/actions/workflows/security.yml/badge.svg)](https://github.com/jysnctcutn/vaultex/actions/workflows/security.yml)&nbsp;&nbsp;
-[![Lint](https://github.com/jysnctcutn/vaultex/actions/workflows/lint.yml/badge.svg)](https://github.com/jysnctcutn/vaultex/actions/workflows/lint.yml)&nbsp;&nbsp;
-[![License](https://img.shields.io/github/license/jysnctcutn/vaultex)](LICENSE)&nbsp;&nbsp;
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14169/badge)](https://www.bestpractices.dev/projects/14169)&nbsp;
+[![CI](https://github.com/jysnctcutn/vaultex/actions/workflows/ci.yml/badge.svg)](https://github.com/jysnctcutn/vaultex/actions/workflows/ci.yml)&nbsp;
+[![Security](https://github.com/jysnctcutn/vaultex/actions/workflows/security.yml/badge.svg)](https://github.com/jysnctcutn/vaultex/actions/workflows/security.yml)&nbsp;
+[![Lint](https://github.com/jysnctcutn/vaultex/actions/workflows/lint.yml/badge.svg)](https://github.com/jysnctcutn/vaultex/actions/workflows/lint.yml)&nbsp;
+[![License](https://img.shields.io/github/license/jysnctcutn/vaultex)](LICENSE)&nbsp;
 [![Python 3.14](https://img.shields.io/badge/python-3.14-blue?logo=python&logoColor=white)](https://www.python.org/) 
 ---
 
@@ -40,6 +40,7 @@ that blocks traversal outside the vault and can hide entire top-level areas
 [Folder taxonomy](#folder-taxonomy) ·
 [Security model](#security-model) ·
 [Remote access](#remote-access-optional) ·
+[Upgrading and uninstalling](#upgrading-and-uninstalling) ·
 [Contributing](#contributing)
 
 ## Features
@@ -375,6 +376,7 @@ core/
                        get_tech_analysis_history, get_solution_architecture_context
     capture.py         save_brainstorm
     tags.py            get_tags, update_frontmatter
+    move.py            move_note — opt-in via ENABLE_NOTE_MOVE, gated separately from write_tool
     custom.py          Dynamically registers a get/create pair per taxonomy.json custom category
 index_vault.py         Standalone script: builds/refreshes the local semantic-search index
 tests/                  pytest suite — see "CI and pre-commit gates" below
@@ -399,6 +401,7 @@ take precedence, so `FOO=bar python3 server.py` works for one-offs):
 | `MCP_PORT` | `8000` | Bind port |
 | `EXCLUDED_AREAS` | *(none)* | Comma-separated top-level folders this instance refuses to touch at all, e.g. `01-Professional` |
 | `READ_ONLY` | `false` | `true` = write tools aren't even registered (not just blocked at call time) |
+| `ENABLE_NOTE_MOVE` | `false` | `true` = registers `move_note`. Gated separately from, on top of, `READ_ONLY` — off by default even in read/write mode |
 | `LOG_LEVEL` | `info` | Set to `debug` for verbose output (e.g. which files search skips and why) |
 | `VAULT_EMBEDDINGS_DB` | `./vault_embeddings.db` | Override the semantic-search index location |
 | `AUTO_LINK_ON_SAVE` | `true` | `false` disables the automatic "## Related notes" section on brand-new notes (no-op either way until a semantic index exists) |
@@ -460,13 +463,23 @@ rather than guessing.
 | `save_brainstorm` | write | Save a brainstorm/conversation conclusion; auto-routed near related notes if a semantic index exists, else the configured `inbox` folder |
 | `get_tags` | read | A note's frontmatter `tags:` array plus inline `#tag` mentions in the body |
 | `update_frontmatter` | write | Create or update a note's YAML frontmatter (any property, not just tags); never touches the body |
+| `move_note` | write, opt-in | Move/rename a note within the vault — requires `ENABLE_NOTE_MOVE=true` (off by default even in read/write mode); not registered otherwise |
 
 8 of the first 13 tools (everything except `read_note`, `search_vaultex`,
 `semantic_search_vaultex`, and `save_brainstorm`) resolve through
 `taxonomy.json` — see "Folder taxonomy" below. Any custom categories from
 `taxonomy.json` add their own `get_<key>`/`create_<key>_note` tools to this
 list at server startup. `get_tags`/`update_frontmatter` work on any note by
-path and don't go through `taxonomy.json` at all.
+path and don't go through `taxonomy.json` at all. `move_note` also works on
+any note by path, and — unlike every other write tool — is gated by its own
+`ENABLE_NOTE_MOVE` flag on top of `READ_ONLY`, since relocate-and-possibly-
+overwrite is a riskier capability than an additive write. There's still no
+delete tool: a moved note still exists, just at a different path.
+
+`save_decision` and `update_feature` also accept a `subfolder` parameter for
+Builder projects with subfolders configured in `taxonomy.json`'s
+`project_subfolders` (see "Folder taxonomy" below) — required when the
+project has any configured, omitted otherwise.
 
 New notes created by any write tool above get an automatic "## Related
 notes" section linking to close semantic matches, and `save_brainstorm`
@@ -485,6 +498,8 @@ folder in your vault. Run `python3 onboard.py` to fix that — it:
   the 7 built-in roles (ideas, builder projects, professional decisions,
   professional tech analysis, professional architecture, professional
   projects, inbox) to one of them, a custom path you type, or skip it.
+  Offers three modes: map each role yourself (guided), skip for now, or
+  apply a working example taxonomy as a starting point — see below.
 - Optionally scaffolds the 4 [PARA](https://fortelabs.com/blog/para/)
   folders (`Projects/`, `Areas/`, `Resources/`, `Archive/`) if you want a
   starting structure rather than mapping onto something that already
@@ -498,6 +513,54 @@ folder in your vault. Run `python3 onboard.py` to fix that — it:
 - Writes everything to `taxonomy.json` (gitignored — personal, same
   treatment as `.env`). Re-running edits it in place; `--reconfigure`
   starts fresh.
+
+### Example taxonomy
+
+A real, working mapping — one option in `onboard.py`'s menu applies this
+directly as a starting point instead of mapping each role by hand:
+
+| Role | Folder |
+|---|---|
+| `builder_ideas` | `02-Builder/Ideas` |
+| `builder_projects` | `02-Builder/Projects` |
+| `professional_decisions` | `01-Professional/Solution-Architecture/Decisions` |
+| `professional_tech_analysis` | `01-Professional/Solution-Architecture/Gap-Analysis` |
+| `professional_architecture` | `01-Professional/Solution-Architecture/Architecture` |
+| `professional_projects` | `01-Professional/Solution-Architecture/Projects` |
+| `inbox` | `00-Inbox` |
+
+This is one example shape, not a default — a fresh clone still ships with
+every role unconfigured until `onboard.py` runs. Picking this option
+creates any of these folders that don't already exist in your vault, then
+you can re-run the wizard (without `--reconfigure`) any time to adjust
+individual roles.
+
+### Per-project subfolders (optional)
+
+Separate from the 7 built-in roles: a Builder project (`builder_projects`
+role, `save_decision`/`update_feature` with `professional=False`) can opt
+into a fixed set of subfolders via `taxonomy.json`'s `project_subfolders`:
+
+```json
+"project_subfolders": {
+  "MyProject": ["architecture", "general", "archives"]
+}
+```
+
+Once a project has an entry, `save_decision`/`update_feature` **require** a
+`subfolder` argument for that project and reject anything not in the list —
+no guessing, no silent default. A project with no entry (the default for
+every project, including in a fresh clone) keeps the flat project-root
+behavior every project has always had; this is opt-in, not a breaking
+change. `onboard.py` doesn't configure this yet — edit `taxonomy.json`
+directly.
+
+Subfolder names are up to you; `architecture`/`legal`/`general` are just a
+convention (a legal-sensitive product wants `legal`, most don't). One name
+worth adopting everywhere: `archives`, for notes that are discarded/shelved/
+no-longer-applicable — an alternative to deleting them (there's still no
+delete tool) that keeps them fully readable by every tool, just out of the
+way. `move_note` (below) is how a note actually gets there.
 
 For Path B (Docker), run it inside the container so it writes to the same
 bind-mounted `taxonomy.json` the server reads:
@@ -524,6 +587,11 @@ privately rather than filing a public issue.
   browser OAuth flow.
 - **Read-only mode**: `READ_ONLY=true` removes write tools from the tool list
   entirely, not just from what they're allowed to do.
+- **Move gated separately from writes**: `move_note` needs `ENABLE_NOTE_MOVE=true`
+  on top of `READ_ONLY=false` — off by default even in read/write mode, since
+  relocate-and-possibly-overwrite is riskier than an additive write. Both of
+  its paths still go through the same `safe_path`/`EXCLUDED_AREAS` checks as
+  every other tool. There is still no delete tool.
 - **Rate limiting**: every request is capped per source IP on a sliding
   window (`RATE_LIMIT_MAX_REQUESTS` per `RATE_LIMIT_WINDOW_SECONDS`, default
   120/60s) — applied ahead of auth, so both a bearer-token guessing attempt
@@ -638,11 +706,36 @@ stack at the same time against the same vault: SQLite expects one writer.
   container will already say "on"; the public URL just needs a moment to
   catch up. No action needed, just retry.
 
+## Upgrading and uninstalling
+
+**Upgrading** (either path): `git pull`, then re-run the install step for
+your path — `.venv/bin/pip install -r requirements.txt` (Path A) or
+`docker compose up -d --build` (Path B). Re-run `python3 index_vault.py`
+only if a release notes a search-index format change; otherwise your
+existing `vault_embeddings.db`/`oauth_store.db`/`taxonomy.json` carry over
+untouched. Only the latest tagged release and `main` are supported — see
+[SECURITY.md](SECURITY.md#supported-versions).
+
+**Uninstalling**:
+- **Path A**: delete the cloned repo folder (removes the `.venv`, the
+  local `vault_embeddings.db`/`oauth_store.db`, everything). Your actual
+  vault (`VAULTEX_PATH`) is a separate folder and is never touched.
+- **Path B**: `docker compose down` stops and removes the containers.
+  Add `-v` to also delete the `tailscale-state` volume (you'll need to
+  re-run `tailscale funnel --bg 8000` and re-auth the sidecar if you ever
+  bring it back up). Then delete the cloned repo folder as in Path A.
+  Your vault is bind-mounted from `VAULTEX_PATH`, outside the repo, and is
+  never touched by either step.
+
 ## Contributing
 
 Bug reports, feature ideas, and PRs are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md)
 for the dev setup, test policy, and PR checklist. Security issues go through
-[SECURITY.md](SECURITY.md) instead of a public issue.
+[SECURITY.md](SECURITY.md) instead of a public issue. Participation is
+governed by the [Code of Conduct](CODE_OF_CONDUCT.md). See
+[GOVERNANCE.md](GOVERNANCE.md) for how decisions get made, and
+[ROADMAP.md](ROADMAP.md) for what's planned (and explicitly not planned)
+over the next year.
 
 ## License
 

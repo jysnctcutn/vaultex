@@ -42,7 +42,7 @@ class CustomCategory:
 
 def _load() -> dict:
     if not TAXONOMY_PATH.exists():
-        return {"roles": {}, "custom_categories": []}
+        return {"roles": {}, "custom_categories": [], "project_subfolders": {}}
     with open(TAXONOMY_PATH, encoding="utf-8") as f:
         return json.load(f)
 
@@ -50,7 +50,7 @@ def _load() -> dict:
 _data = _load()
 
 roles: dict[str, Path | None] = {
-    key: (Path(value) if value else None) for key, value in {**{k: None for k in ROLE_KEYS}, **_data.get("roles", {})}.items()
+    key: (Path(value) if value else None) for key, value in {**dict.fromkeys(ROLE_KEYS), **_data.get("roles", {})}.items()
 }
 
 custom_categories: list[CustomCategory] = [
@@ -65,3 +65,9 @@ custom_categories: list[CustomCategory] = [
     )
     for c in _data.get("custom_categories", [])
 ]
+
+# Opt-in per Builder project: which subfolder names save_decision/
+# update_feature will accept (and require) for that project_name. A
+# project with no entry here keeps the flat project-root behavior every
+# project has always had -- this is additive, not a default.
+project_subfolders: dict[str, list[str]] = _data.get("project_subfolders", {})

@@ -242,7 +242,7 @@ def main() -> None:
 
         env = os.environ.copy()
         env["VAULTEX_PATH"] = str(vault)
-        env["MCP_AUTH_TOKEN"] = "benchmark-fixture-not-a-real-secret"
+        env["MCP_AUTH_TOKEN"] = "benchmark-fixture-not-a-real-secret"  # noqa: S105
         env.pop("OAUTH_ISSUER_URL", None)
         env.pop("AUTHORIZE_PASSWORD", None)
 

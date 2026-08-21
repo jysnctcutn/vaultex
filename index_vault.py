@@ -75,7 +75,7 @@ def main() -> None:
         for note_path in sorted(vault_path.rglob("*.md")):
             rel = str(note_path.relative_to(vault_path))
             n = index_note(conn, model, vault_path, note_path)
-            indexed_notes += 1
+            indexed_notes += 1  # noqa: SIM113 — enumerate() doesn't fit: indexed_chunks below is a running sum of a different quantity, not the loop index
             indexed_chunks += n
             print(f"  indexed {rel} ({n} chunks)")
         removed = 0

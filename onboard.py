@@ -40,6 +40,19 @@ ROLES = [
 
 PARA_FOLDERS = ["Projects", "Areas", "Resources", "Archive"]
 
+# The author's own vault layout (see taxonomy.json in this repo). Not a
+# default — core/taxonomy.py deliberately ships with every role unconfigured
+# — but offered here as an opt-in starting point for anyone who wants it.
+AUTHOR_TAXONOMY = {
+    "builder_ideas": "02-Builder/Ideas",
+    "builder_projects": "02-Builder/Projects",
+    "professional_decisions": "01-Professional/Solution-Architecture/Decisions",
+    "professional_tech_analysis": "01-Professional/Solution-Architecture/Gap-Analysis",
+    "professional_architecture": "01-Professional/Solution-Architecture/Architecture",
+    "professional_projects": "01-Professional/Solution-Architecture/Projects",
+    "inbox": "00-Inbox",
+}
+
 
 def _vault_path() -> Path:
     import os
@@ -116,14 +129,34 @@ def main() -> None:
         folders = _top_level_folders(vault)
 
     print("\n--- Built-in roles ---")
-    for key, description in ROLES:
-        current = data["roles"].get(key)
-        label = f" (currently: {current})" if current else ""
-        choice = _prompt_choice(folders, f"{description}{label}")
-        if choice is not None:
-            data["roles"][key] = choice
-        elif key not in data["roles"]:
-            data["roles"].setdefault(key, None)
+    print("How do you want to configure these?")
+    print("  1. Map each role to one of your own vault's folders (guided)")
+    print("  2. Use the author's taxonomy structure (JC's own layout, shown below) as a starting point")
+    print("  3. Skip for now — leave roles unconfigured")
+    for key, path in AUTHOR_TAXONOMY.items():
+        print(f"       {key}: {path}")
+    mode = input("> ").strip() or "1"
+
+    if mode == "2":
+        data["roles"].update(AUTHOR_TAXONOMY)
+        for path in AUTHOR_TAXONOMY.values():
+            p = vault / path
+            if not p.exists():
+                p.mkdir(parents=True)
+                print(f"  created {path}/")
+        print("Applied the author's taxonomy structure. Re-run this wizard (without --reconfigure) "
+              "any time to adjust individual roles.")
+    elif mode == "3":
+        print("Skipped — roles left as-is.")
+    else:
+        for key, description in ROLES:
+            current = data["roles"].get(key)
+            label = f" (currently: {current})" if current else ""
+            choice = _prompt_choice(folders, f"{description}{label}")
+            if choice is not None:
+                data["roles"][key] = choice
+            elif key not in data["roles"]:
+                data["roles"].setdefault(key, None)
 
     # Drop explicit nulls so the file matches core/taxonomy.py's "missing key = unconfigured" contract.
     data["roles"] = {k: v for k, v in data["roles"].items() if v}

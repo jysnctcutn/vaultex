@@ -3,7 +3,7 @@
 from mcp.server import MCPServer
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 
-from .config import OAUTH_ISSUER_URL, READ_ONLY
+from .config import ENABLE_NOTE_MOVE, OAUTH_ISSUER_URL, READ_ONLY
 
 _auth_kwargs = {}
 if OAUTH_ISSUER_URL:
@@ -43,6 +43,17 @@ def write_tool(func):
     tool is skipped entirely, so it doesn't appear in tools/list at all —
     not just blocked when called."""
     if READ_ONLY:
+        return func
+    return mcp.tool()(func)
+
+
+def move_tool(func):
+    """Register a tool only when READ_ONLY is false AND ENABLE_NOTE_MOVE is
+    true -- a stricter gate than write_tool, since move/rename is a
+    qualitatively riskier capability (can relocate or overwrite anything in
+    the vault) than an additive write. Off by default even in read/write
+    mode; the operator has to opt in explicitly."""
+    if READ_ONLY or not ENABLE_NOTE_MOVE:
         return func
     return mcp.tool()(func)
 

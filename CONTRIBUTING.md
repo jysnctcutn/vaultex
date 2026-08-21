@@ -73,7 +73,13 @@ There is also a reproducible benchmark script under `benchmarks/` (context hando
 ruff check .
 ```
 
-`ruff.toml` scopes this to pyflakes + pycodestyle-errors only — real mistakes (unused imports, undefined names), not style bikeshedding. CI runs lint and tests on pushes and pull requests to `main`. Please keep the branch green.
+Base style guide is [PEP 8](https://peps.python.org/pep-0008/); `ruff.toml`
+enforces the subset that catches real mistakes and common vulnerability
+classes rather than bikeshedding style — pyflakes/pycodestyle (`E`, `F`,
+`W`), bugbear (`B`), bandit-equivalent security rules (`S`), pyupgrade
+(`UP`), and comprehension/simplification rules (`C4`, `SIM`). CI runs lint
+and tests on pushes and pull requests to `main`. Please keep the branch
+green.
 
 ## Coding guidelines
 
@@ -91,7 +97,13 @@ Clear, imperative summaries are enough, e.g.:
 - `Add rate limiting middleware for search tools`
 - `Document vulnerability reporting in SECURITY.md`
 
-Signed-off-by (DCO) is welcome but not required unless we adopt it formally later.
+## Developer Certificate of Origin (DCO)
+
+By contributing, you certify that you wrote the contribution yourself, or
+otherwise have the right to submit it under the project's license, per the
+[Developer Certificate of Origin](https://developercertificate.org/).
+Sign your commits with `git commit -s` (adds a `Signed-off-by:` trailer
+with your name and email) to certify this.
 
 ## License
 

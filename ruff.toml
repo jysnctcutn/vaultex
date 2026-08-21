@@ -1,9 +1,21 @@
 line-length = 110
 
 [lint]
-# Pyflakes (F) + pycodestyle errors (E) — catches real bugs (unused
-# imports, undefined names, unused variables) rather than bikeshedding
-# style. Deliberately not a wider preset: broad "ALL"-style rule sets
-# fight the codebase's existing conventions instead of catching mistakes.
-select = ["E", "F"]
+# E/F: pyflakes + pycodestyle errors — real bugs (unused imports, undefined
+# names, unused variables). W: pycodestyle warnings. B: bugbear — common
+# correctness footguns (mutable default args, unused loop vars, etc).
+# S: bandit-equivalent security rules — hardcoded passwords, insecure
+# subprocess/eval usage, weak crypto, etc. UP: pyupgrade — outdated syntax
+# for the Python versions this project supports. C4: unnecessary
+# comprehension/generator patterns. SIM: obviously-simplifiable code.
+# Deliberately not "ALL": rule sets like ANN (mandatory type annotations on
+# every function) or D (docstring format enforcement) would fight this
+# codebase's existing conventions rather than catch mistakes.
+select = ["E", "F", "W", "B", "S", "UP", "C4", "SIM"]
 ignore = ["E501"]  # line length not enforced here; not a correctness concern
+
+[lint.per-file-ignores]
+# S101 (assert): the standard, correct way to write pytest assertions —
+# not a production code smell here. S105 (hardcoded password): conftest's
+# fixture token is a literal test value, not a real credential.
+"tests/*" = ["S101", "S105"]
