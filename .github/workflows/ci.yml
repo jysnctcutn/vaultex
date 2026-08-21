@@ -14,8 +14,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
       # torch is a transitive dep of sentence-transformers; on Linux pip
       # defaults to the CUDA build. Same CPU-only pin as the Dockerfile.
       - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
       - run: pip install -r requirements.txt -r requirements-dev.txt
-      - run: pytest
+      - run: pytest --cov=core --cov=server --cov-report=term-missing --cov-fail-under=80

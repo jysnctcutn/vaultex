@@ -36,9 +36,9 @@ where an unresolved check would pass.
 
 **Evidence**:
 - `core/vault.py:check_area_allowed` — `candidate = (VAULT_PATH / relative).resolve()`, then containment and `EXCLUDED_AREAS` checked against `candidate`
-- `tests/test_vault_safe_path.py` — regression tests for `../` traversal, absolute-path escape (`/etc/passwd`), and excluded-area access, all passing
+- `tests/core/test_vault_safe_path.py` — regression tests for `../` traversal, absolute-path escape (`/etc/passwd`), and excluded-area access, all passing
 - No tool in `core/tools/*.py` builds a filesystem path without going through `safe_path`/`check_area_allowed` (verified by reading every tool module)
-- `move_note` (opt-in, `ENABLE_NOTE_MOVE`) resolves *both* its source and destination through `safe_path` before touching the filesystem — a restricted server instance can neither read a source nor write a destination that falls inside an excluded area. Covered by `tests/test_move_note.py`'s traversal/excluded-area tests on both paths independently.
+- `move_note` (opt-in, `ENABLE_NOTE_MOVE`) resolves *both* its source and destination through `safe_path` before touching the filesystem — a restricted server instance can neither read a source nor write a destination that falls inside an excluded area. Covered by `tests/core/test_vault_move.py`'s traversal/excluded-area tests on both paths independently.
 
 ## Claim 3: No secret (token, password, private key) is committed to the repository, past or present
 
@@ -71,7 +71,7 @@ tool but says nothing about how expensive one call can be.
 **Evidence**:
 - `core/middleware.py:RateLimitMiddleware` — sliding window, applied before auth, default 120 req/60s
 - `core/vault.py:validate_limit` (`MAX_LIMIT = 200`) — every tool with a `limit` parameter (`search_vaultex`, `semantic_search_vaultex`, `get_app_ideas`, `get_project_context`, `get_architecture_decisions`, `get_tech_analysis_history`, `get_solution_architecture_context`) rejects an out-of-range value instead of silently accepting it
-- `tests/test_vault_helpers.py` — regression tests for zero, negative, over-max, and non-integer `limit` values
+- `tests/core/test_vault_helpers.py` — regression tests for zero, negative, over-max, and non-integer `limit` values
 
 ## Claim 6: OAuth 2.1 remote access cannot be completed by an unauthorized party, even though dynamic client registration is unauthenticated by spec
 
