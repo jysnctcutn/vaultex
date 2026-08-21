@@ -10,6 +10,32 @@
 
 Vaultex is a single-user, self-hosted MCP server. Security fixes land on `main` first and are included in the next tagged release.
 
+## Verifying releases
+
+Starting with `v0.3.0`, tagged releases are signed with the maintainer's
+GPG key.
+
+**Get the public key:**
+- GitHub: [github.com/jysnctcutn.gpg](https://github.com/jysnctcutn.gpg)
+  (also attached to the maintainer's [GitHub profile](https://github.com/jysnctcutn),
+  so signed tags show a "Verified" badge on the repo's tags/releases pages)
+
+**Verify a tag:**
+
+```bash
+git verify-tag v0.3.0
+# or, after fetching the tag into a local clone:
+git tag -v v0.3.0
+```
+
+Tags before `v0.3.0` predate this process and are not signed; if you need
+integrity assurance for those, use `main` or upgrade to a signed release
+per [UPGRADING.md](UPGRADING.md).
+
+The private signing key lives only on the maintainer's local machine — it
+is never stored in this repository or on any site used to distribute the
+software.
+
 ## Reporting a Vulnerability
 
 **Do not open a public GitHub issue for security vulnerabilities.**
