@@ -55,7 +55,6 @@ def test_create_fn_missing_required_section_raises():
 
 
 def test_get_fn_excerpt_is_capped_and_stripped():
-    create = _make_create_fn(_CATEGORY)
     get = _make_get_fn(_CATEGORY)
     write(safe_path("03-Knowledge/MeetingNotes/manual.md"), "  " + ("y" * 300), overwrite=True)
     listed = get()

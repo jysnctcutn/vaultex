@@ -139,7 +139,7 @@ def test_load_access_token_dynamic_valid(provider):
 
     from core.oauth import store as store_mod
 
-    at = AccessToken(token="dyn-tok", client_id="c1", scopes=["mcp"], expires_at=int(9999999999))
+    at = AccessToken(token="dyn-tok", client_id="c1", scopes=["mcp"], expires_at=9999999999)
     store_mod.save_access_token(provider_mod.OAUTH_STORE_DB, at)
     loaded = _run(provider.load_access_token("dyn-tok"))
     assert loaded is not None

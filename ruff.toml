@@ -16,6 +16,7 @@ ignore = ["E501"]  # line length not enforced here; not a correctness concern
 
 [lint.per-file-ignores]
 # S101 (assert): the standard, correct way to write pytest assertions —
-# not a production code smell here. S105 (hardcoded password): conftest's
-# fixture token is a literal test value, not a real credential.
-"tests/*" = ["S101", "S105"]
+# not a production code smell here. S105/S106 (hardcoded password, as a
+# variable or a keyword argument): oauth test fixtures pass literal token
+# values, not real credentials.
+"tests/*" = ["S101", "S105", "S106"]

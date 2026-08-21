@@ -7,7 +7,29 @@ on:
     branches: [main]
 
 jobs:
+  # gitleaks (below) always runs regardless of what changed -- a secret can
+  # leak in any file type, not just dependency manifests. pip-audit only
+  # cares about requirements*.txt, so it's the one job worth skipping when
+  # those files didn't change.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      requirements: ${{ steps.filter.outputs.requirements }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            requirements:
+              - 'requirements.txt'
+              - 'requirements-dev.txt'
+
   pip-audit:
+    needs: changes
+    if: needs.changes.outputs.requirements == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
