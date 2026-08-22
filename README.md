@@ -164,20 +164,21 @@ only get filled in during Path B, later.
 
 ### 3. (Optional) Set up your folder taxonomy
 
-9 of the 16 tools — the ones that read/write ideas, projects, decisions,
-etc. rather than doing free-form search — need to know which folders in
-*your* vault to use. Skip this stage entirely and the server still runs
-fine: those 9 tools just report "not configured" until you come back to
-this. `search_vaultex`, `semantic_search_vaultex`, `read_note`, and
-`save_brainstorm` never need this — they work on any vault immediately.
+12 of the 19 tools — the ones that read/write ideas, projects, decisions,
+episodic sessions/events, etc. rather than doing free-form search — need to
+know which folders in *your* vault to use. Skip this stage entirely and the
+server still runs fine: those 12 tools just report "not configured" until
+you come back to this. `search_vaultex`, `semantic_search_vaultex`,
+`read_note`, and `save_brainstorm` never need this — they work on any vault
+immediately.
 
 ```bash
 python3 onboard.py
 ```
 
-Walks your vault's existing folders, lets you map each of the 7 built-in
+Walks your vault's existing folders, lets you map each of the 8 built-in
 roles (or skip it), optionally scaffolds PARA folders, and lets you define
-your own categories beyond the built-in 7. Full detail in "Folder taxonomy"
+your own categories beyond the built-in 8. Full detail in "Folder taxonomy"
 further down. Safe to run later instead — nothing here blocks stage 4.
 
 ### 4. Pick a path and run it
@@ -376,6 +377,7 @@ core/
     architecture.py    get_architecture_decisions, save_decision,
                        get_tech_analysis_history, get_solution_architecture_context
     capture.py         save_brainstorm
+    episodic.py        log_event, start_session, close_session
     tags.py            get_tags, update_frontmatter
     move.py            move_note — opt-in via ENABLE_NOTE_MOVE, gated separately from write_tool
     custom.py          Dynamically registers a get/create pair per taxonomy.json custom category
@@ -466,8 +468,11 @@ rather than guessing.
 | `get_tags` | read | A note's frontmatter `tags:` array plus inline `#tag` mentions in the body |
 | `update_frontmatter` | write | Create or update a note's YAML frontmatter (any property, not just tags); never touches the body |
 | `move_note` | write, opt-in | Move/rename a note within the vault — requires `ENABLE_NOTE_MOVE=true` (off by default even in read/write mode); not registered otherwise |
+| `log_event` | write | Append a one-shot episodic event/outcome note under the configured `episodic` folder |
+| `start_session` | write | Open an episodic session note bracketing a multi-turn agent run; returns its path |
+| `close_session` | write | Close a session opened by `start_session` — sets `status: closed`, stamps `ended`, appends `## Outcome` |
 
-9 of the 16 tools (everything except `read_note`, `search_vaultex`,
+12 of the 19 tools (everything except `read_note`, `search_vaultex`,
 `semantic_search_vaultex`, `save_brainstorm`, `get_tags`,
 `update_frontmatter`, and `move_note`) resolve through
 `taxonomy.json` — see "Folder taxonomy" below. Any custom categories from
@@ -490,24 +495,33 @@ auto-routes to sit next to related notes rather than always landing in the
 inbox — both no-ops until a semantic index exists (`index_vault.py`), and
 both configurable/disableable (see "Configuration reference").
 
+`log_event`/`start_session`/`close_session` are append-only and hard-
+validate the body on every write: `## Goal`, `## What happened`,
+`## Decisions made (raw)`, `## Open questions left`, and
+`## Artifacts / links` must all be present (`close_session` additionally
+requires `## Outcome`), or the write is rejected naming what's missing.
+They write into the `episodic` folder, never into a project's durable
+folder directly — the first phase of a durable agent-memory layer, with
+retrieval and distillation tools to follow in later phases.
+
 ## Folder taxonomy
 
 Fresh clone, no `taxonomy.json` yet = a taxonomy-free server. Reads among
-the 9 role-gated tools raise a clear `TaxonomyNotConfigured` error instead
+the 12 role-gated tools raise a clear `TaxonomyNotConfigured` error instead
 of silently returning nothing; writes raise instead of silently creating a
 folder in your vault. Run `python3 onboard.py` to fix that — it:
 
 - Scans your vault's existing top-level folders and lets you assign each of
-  the 7 built-in roles (ideas, builder projects, professional decisions,
+  the 8 built-in roles (ideas, builder projects, professional decisions,
   professional tech analysis, professional architecture, professional
-  projects, inbox) to one of them, a custom path you type, or skip it.
-  Offers three modes: map each role yourself (guided), skip for now, or
-  apply a working example taxonomy as a starting point — see below.
+  projects, inbox, episodic) to one of them, a custom path you type, or
+  skip it. Offers three modes: map each role yourself (guided), skip for
+  now, or apply a working example taxonomy as a starting point — see below.
 - Optionally scaffolds the 4 [PARA](https://fortelabs.com/blog/para/)
   folders (`Projects/`, `Areas/`, `Resources/`, `Archive/`) if you want a
   starting structure rather than mapping onto something that already
   exists.
-- Lets you define **custom categories** beyond the 7 built-in roles — e.g.
+- Lets you define **custom categories** beyond the 8 built-in roles — e.g.
   your own "Meeting Notes" — each becoming a real `get_<key>`/
   `create_<key>_note` tool pair, registered dynamically at server startup.
   Optional per-category required sections (same mechanism `save_decision`
@@ -531,6 +545,7 @@ directly as a starting point instead of mapping each role by hand:
 | `professional_architecture` | `01-Professional/Solution-Architecture/Architecture` |
 | `professional_projects` | `01-Professional/Solution-Architecture/Projects` |
 | `inbox` | `00-Inbox` |
+| `episodic` | `02-Builder/Episodic` |
 
 This is one example shape, not a default — a fresh clone still ships with
 every role unconfigured until `onboard.py` runs. Picking this option
@@ -540,7 +555,7 @@ individual roles.
 
 ### Per-project subfolders (optional)
 
-Separate from the 7 built-in roles: a Builder project (`builder_projects`
+Separate from the 8 built-in roles: a Builder project (`builder_projects`
 role, `save_decision`/`update_feature` with `professional=False`) can opt
 into a fixed set of subfolders via `taxonomy.json`'s `project_subfolders`:
 

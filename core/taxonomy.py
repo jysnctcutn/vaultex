@@ -26,6 +26,7 @@ ROLE_KEYS = [
     "professional_architecture",
     "professional_projects",
     "inbox",
+    "episodic",
 ]
 
 
