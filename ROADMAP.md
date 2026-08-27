@@ -4,14 +4,21 @@ What Vaultex intends to do, and explicitly not do, over the next year. This
 reflects the project's actual working TODO list, not aspirational planning —
 see [CONTRIBUTING.md](CONTRIBUTING.md) if you want to help with any of it.
 
-## Planned
+## Shipped
 
-- **Agent memory system (episodic + distillation layer)** — the next major
-  release. Vaultex today is a strong *durable* memory substrate (typed
-  write tools, project-scoped retrieval, path isolation) but has no
-  first-class *episodic* layer for agent session/event logs, and no
-  deliberate step that promotes high-signal experience into durable
-  project knowledge. Release will be in phases.
+- **Agent memory system (episodic + distillation layer)** — delivered in
+  phases: the episodic write path (`log_event` / `start_session` /
+  `update_session` / `close_session`), time-scoped retrieval and provenance
+  (`get_episodic_context`, `include_episodic`, `source_episodic` on
+  `save_decision`, `save_open_question`), distillation (`distill_session`
+  bundles a finished session; `apply_distillation` promotes an approved
+  proposal into durable notes with provenance and marks the session
+  `promoted`), and lightweight multi-agent coordination (`claim_note` /
+  `release_note` / `flag_conflict` / `check_note_status` over note
+  frontmatter). Follow-ups still open: provenance params on
+  `update_feature`, and an agent-identity registry for the `agents:` field.
+
+## Planned
 - **Section-aware editing** — patch a note by heading or block reference
   instead of rewriting the whole file, matching the PATCH-style editing
   other Obsidian MCP servers get for free from Obsidian's Local REST API
@@ -21,9 +28,11 @@ see [CONTRIBUTING.md](CONTRIBUTING.md) if you want to help with any of it.
   scanner, splice operations (replace/append/prepend) on the identified
   range, and `createTargetIfMissing` to append a new heading when the
   target isn't found. Not started.
-- **`search_vaultex` / `semantic_search_vaultex` merge question** — decide
-  whether to blend keyword and semantic search into one tool or keep them
-  separate. Still undecided.
+- **`search_vaultex` / `semantic_search_vaultex` blended tool** — decided:
+  a hybrid tool using Reciprocal Rank Fusion (k=60) over both retrievers,
+  original tools kept unchanged, soft-failing to keyword-only when no
+  semantic index exists. Full Learning-to-Rank is a later upgrade, gated on
+  real query volume and relevance signal. Not yet implemented.
 - **Richer custom categories** — today's `taxonomy.json` custom categories
   are a simple list+create pattern only, no professional/builder split, no
   per-project subfolders, no sibling-file reads. New scope if richer

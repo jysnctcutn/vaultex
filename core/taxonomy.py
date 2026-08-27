@@ -27,6 +27,7 @@ ROLE_KEYS = [
     "professional_projects",
     "inbox",
     "episodic",
+    "open_questions",
 ]
 
 

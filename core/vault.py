@@ -33,6 +33,7 @@ BUILDER_IDEAS = roles["builder_ideas"]
 BUILDER_PROJECTS = roles["builder_projects"]
 INBOX = roles["inbox"]
 EPISODIC = roles["episodic"]
+OPEN_QUESTIONS = roles["open_questions"]
 
 
 def top_level_area(relative: Path) -> str:

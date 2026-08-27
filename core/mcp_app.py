@@ -3,7 +3,7 @@
 from mcp.server import MCPServer
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 
-from .config import ENABLE_NOTE_MOVE, OAUTH_ISSUER_URL, READ_ONLY
+from .config import ENABLE_DISTILL_APPLY, ENABLE_NOTE_MOVE, OAUTH_ISSUER_URL, READ_ONLY
 
 _auth_kwargs = {}
 if OAUTH_ISSUER_URL:
@@ -54,6 +54,16 @@ def move_tool(func):
     the vault) than an additive write. Off by default even in read/write
     mode; the operator has to opt in explicitly."""
     if READ_ONLY or not ENABLE_NOTE_MOVE:
+        return func
+    return mcp.tool()(func)
+
+
+def distill_apply_tool(func):
+    """Register apply_distillation only when READ_ONLY is false AND
+    ENABLE_DISTILL_APPLY is true -- its write-back promotes episodic content
+    into the durable store, so it's opt-in like move_note. The read-only
+    distill_session bundler is registered unconditionally."""
+    if READ_ONLY or not ENABLE_DISTILL_APPLY:
         return func
     return mcp.tool()(func)
 

@@ -1,11 +1,11 @@
 """
 Vaultex — Taxonomy Onboarding Wizard
 
-Interactive setup for taxonomy.json: maps the server's 8 built-in folder
+Interactive setup for taxonomy.json: maps the server's 9 built-in folder
 roles (Ideas, Projects, Decisions, Tech Analysis, Architecture, Professional
-Projects, Inbox, Episodic) onto whatever your vault actually looks like, and
-lets you define custom categories (e.g. your own "Meeting Notes") with their
-own get/create tools.
+Projects, Inbox, Episodic, Open Questions) onto whatever your vault actually
+looks like, and lets you define custom categories (e.g. your own "Meeting
+Notes") with their own get/create tools.
 
 Run:
     python3 onboard.py                # edit-in-place if taxonomy.json exists
@@ -38,6 +38,7 @@ ROLES = [
     ("professional_projects", "Professional/client project work"),
     ("inbox", "Default folder for captured brainstorms/conversation conclusions"),
     ("episodic", "Append-only agent session/event log (log_event, start_session, close_session)"),
+    ("open_questions", "Durable per-project open questions promoted from agent runs (save_open_question)"),
 ]
 
 PARA_FOLDERS = ["Projects", "Areas", "Resources", "Archive"]
@@ -54,6 +55,7 @@ AUTHOR_TAXONOMY = {
     "professional_projects": "01-Professional/Solution-Architecture/Projects",
     "inbox": "00-Inbox",
     "episodic": "02-Builder/Episodic",
+    "open_questions": "02-Builder/Open-Questions",
 }
 
 
@@ -163,7 +165,7 @@ def main() -> None:
     data["roles"] = {k: v for k, v in data["roles"].items() if v}
 
     print("\n--- Custom categories ---")
-    print("Add a role beyond the 8 built-in ones (e.g. \"Meeting Notes\"), with its own get/create tools.")
+    print("Add a role beyond the 9 built-in ones (e.g. \"Meeting Notes\"), with its own get/create tools.")
     while input("Add a custom category? (y/N) ").strip().lower() == "y":
         raw_key = input("  Short key (e.g. 'meeting_notes'): ").strip()
         key = _slug_key(raw_key)

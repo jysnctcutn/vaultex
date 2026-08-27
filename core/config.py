@@ -11,6 +11,8 @@ precedence over `.env`, so a one-off `FOO=bar python3 server.py` still works.
     READ_ONLY=false          # true = only read-style tools are registered at all
     ENABLE_NOTE_MOVE=false   # true = registers move_note (move/rename within the vault);
                               # off by default even when READ_ONLY=false
+    ENABLE_DISTILL_APPLY=false # true = registers apply_distillation (writes distilled
+                              # decisions/open-questions into the durable store)
     LOG_LEVEL=info           # set to "debug" for verbose output
     RATE_LIMIT_MAX_REQUESTS=120   # requests allowed per IP per RATE_LIMIT_WINDOW_SECONDS
     RATE_LIMIT_WINDOW_SECONDS=60  # sliding window size, in seconds
@@ -104,6 +106,12 @@ READ_ONLY = os.environ.get("READ_ONLY", "false").strip().lower() in {"1", "true"
 # vault is a qualitatively riskier capability than an additive write, so it
 # defaults off even in read/write mode and needs an explicit opt-in.
 ENABLE_NOTE_MOVE = os.environ.get("ENABLE_NOTE_MOVE", "false").strip().lower() in {"1", "true", "yes"}
+
+# apply_distillation (core/tools/distill.py) is gated the same way as
+# move_note: distillation's write-back promotes episodic content into the
+# durable store, so it's opt-in on top of READ_ONLY. distill_session
+# (propose/bundle, read-only) is always available.
+ENABLE_DISTILL_APPLY = os.environ.get("ENABLE_DISTILL_APPLY", "false").strip().lower() in {"1", "true", "yes"}
 
 # Self-hosted OAuth 2.1, opt-in. Unset OAUTH_ISSUER_URL = today's
 # bearer-token-only behavior (no OAuth routes registered at all). Set it

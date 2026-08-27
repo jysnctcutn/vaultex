@@ -1,14 +1,27 @@
-"""Episodic memory tools (Phase 1): append-only session/event notes under
-the `episodic` role, separate from a project's durable folder until a
-future distillation step promotes them.
+"""Episodic memory tools: append-only session/event notes under the
+`episodic` role, kept out of a project's durable folder until distillation.
+
+Phase 1: log_event, start_session, close_session.
+Phase 2: update_session, get_episodic_context, and recent_episodic_paths()
+(shared with get_project_context's include_episodic flag).
 """
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from ..frontmatter import join, split
-from ..mcp_app import write_tool
-from ..vault import EPISODIC, read, require_role, safe_path, verify_sections, write
+from ..mcp_app import mcp, write_tool
+from ..vault import (
+    EPISODIC,
+    iter_markdown,
+    read,
+    read_capped,
+    require_role,
+    safe_path,
+    validate_limit,
+    verify_sections,
+    write,
+)
 
 # Hard-validated on every episodic write; "## Outcome" is required in
 # addition once a session closes.
@@ -19,6 +32,14 @@ REQUIRED_SECTIONS = [
     "## Open questions left",
     "## Artifacts / links",
 ]
+
+# Sections update_session can rewrite; "## Goal"/"## Outcome" are not editable here.
+_UPDATABLE_SECTIONS = {
+    "what_happened": "## What happened",
+    "decisions": "## Decisions made (raw)",
+    "open_questions": "## Open questions left",
+    "artifacts": "## Artifacts / links",
+}
 
 _SLUG_RE = re.compile(r"[^a-zA-Z0-9]+")
 
@@ -57,6 +78,48 @@ def _clean(fm: dict) -> dict:
     return {k: v for k, v in fm.items() if v is not None}
 
 
+def _replace_section(body: str, heading: str, new_text: str) -> str:
+    """Swap the content under `heading` (to the next `## ` or EOF) for `new_text`."""
+    pattern = re.compile(
+        rf"(^{re.escape(heading)}[ \t]*\n)(.*?)(?=^## |\Z)",
+        re.DOTALL | re.MULTILINE,
+    )
+    if not pattern.search(body):
+        raise ValueError(f"Session note is missing the {heading!r} section; cannot update it.")
+    return pattern.sub(lambda m: f"{m.group(1)}{new_text.rstrip()}\n\n", body, count=1).rstrip() + "\n"
+
+
+def _parse_ts(value) -> datetime | None:
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    return dt.replace(tzinfo=None) if dt.tzinfo else dt
+
+
+def recent_episodic_paths(project: str, days: int) -> list:
+    """Episodic-note paths for `project`, newest first. `days <= 0` = no time
+    filter; else keep notes whose `ended`/`started`/mtime is within the window.
+    Raises TaxonomyNotConfigured if the `episodic` role isn't set."""
+    root = require_role(EPISODIC, "episodic")
+    cutoff = None if days <= 0 else datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    matches = []
+    for path in iter_markdown(root):
+        fm, _ = split(read(path))
+        if fm.get("project") != project:
+            continue
+        if cutoff is not None:
+            stamp = _parse_ts(fm.get("ended")) or _parse_ts(fm.get("started"))
+            if stamp is None:
+                stamp = datetime.utcfromtimestamp(path.stat().st_mtime)
+            if stamp < cutoff:
+                continue
+        matches.append(path)
+    return sorted(matches, key=lambda p: p.stat().st_mtime, reverse=True)
+
+
 @write_tool
 def log_event(project: str, kind: str, summary: str, details: str = "",
               agents: list[str] | None = None, tags: list[str] | None = None) -> str:
@@ -93,7 +156,8 @@ def start_session(project: str, goal: str, task_id: str | None = None,
                    agents: list[str] | None = None, tags: list[str] | None = None) -> str:
     """Open an episodic session note bracketing a multi-turn agent run.
 
-    Returns the note's path; pass it to close_session when the run ends."""
+    Returns the note's path; fill it in with update_session, then
+    close_session when the run ends."""
     if not project:
         raise ValueError("project is required")
     fm = _clean({
@@ -114,6 +178,36 @@ def start_session(project: str, goal: str, task_id: str | None = None,
 
 
 @write_tool
+def update_session(session_path: str, what_happened: str | None = None,
+                    decisions: str | None = None, open_questions: str | None = None,
+                    artifacts: str | None = None) -> str:
+    """Rewrite one or more body sections of an OPEN session note in place,
+    so detail lands before close_session instead of leaving "(in progress)".
+
+    Only the sections you pass are touched ("## Goal"/"## Outcome" aren't
+    editable here). Each call replaces a section wholesale -- pass the full
+    current text, not a delta."""
+    updates = {k: v for k, v in {
+        "what_happened": what_happened, "decisions": decisions,
+        "open_questions": open_questions, "artifacts": artifacts,
+    }.items() if v is not None}
+    if not updates:
+        raise ValueError("Pass at least one of: what_happened, decisions, open_questions, artifacts.")
+    note_path = safe_path(session_path)
+    if not note_path.is_file():
+        raise FileNotFoundError(f"No such episodic note: {session_path}")
+    fm, body = split(read(note_path))
+    if fm.get("kind") != "session":
+        raise ValueError(f"{session_path} is not a session note (kind={fm.get('kind')!r})")
+    if fm.get("status") != "open":
+        raise ValueError(f"{session_path} is not open (status={fm.get('status')!r}); reopen is not supported.")
+    for key, text in updates.items():
+        body = _replace_section(body, _UPDATABLE_SECTIONS[key], text)
+    verify_sections(body, REQUIRED_SECTIONS)
+    return write(note_path, join(fm, body), overwrite=True)
+
+
+@write_tool
 def close_session(session_path: str, outcome: str) -> str:
     """Close a session opened by start_session: sets status="closed",
     stamps `ended`, and appends the required ## Outcome section."""
@@ -130,3 +224,35 @@ def close_session(session_path: str, outcome: str) -> str:
     new_body = f"{body.rstrip()}\n\n## Outcome\n{outcome}\n"
     verify_sections(new_body, [*REQUIRED_SECTIONS, "## Outcome"])
     return write(note_path, join(fm, new_body), overwrite=True)
+
+
+@mcp.tool()
+def get_episodic_context(project: str, days: int = 7, limit: int = 20,
+                          kind: str | None = None, status: str | None = None,
+                          promoted: bool | None = None) -> list[dict]:
+    """Recent episodic notes for `project` as {path, content} dicts, newest
+    first -- the time-scoped counterpart to get_project_context.
+
+    days: look-back window (<=0 for none). kind: "session"/"event"/"outcome".
+    status: "open"/"closed". promoted: True/False to filter by whether
+    distillation has already promoted the note (e.g. promoted=False,
+    status="closed" finds sessions still waiting to be distilled)."""
+    validate_limit(limit)
+    if kind is not None and kind not in ("session", "event", "outcome"):
+        raise ValueError(f"kind must be 'session', 'event', or 'outcome', got: {kind!r}")
+    if status is not None and status not in ("open", "closed"):
+        raise ValueError(f"status must be 'open' or 'closed', got: {status!r}")
+    paths = recent_episodic_paths(project, days)
+    if kind is not None or status is not None or promoted is not None:
+        kept = []
+        for path in paths:
+            fm, _ = split(read(path))
+            if kind is not None and fm.get("kind") != kind:
+                continue
+            if status is not None and fm.get("status") != status:
+                continue
+            if promoted is not None and bool(fm.get("promoted", False)) != promoted:
+                continue
+            kept.append(path)
+        paths = kept
+    return read_capped(paths, limit=limit)
