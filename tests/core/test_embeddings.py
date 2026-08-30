@@ -20,6 +20,7 @@ from core.embeddings import (
     get_model,
     incremental_sweep,
     index_note,
+    log_search_event,
     periodic_reindex,
     strip_frontmatter,
 )
@@ -239,3 +240,49 @@ async def test_periodic_reindex_runs_sweep_on_timer_and_swallows_errors(monkeypa
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+# --- log_search_event (search_events table for future LTR) ---
+
+
+def test_log_search_event_creates_table_and_row(tmp_path):
+    import json
+    import sqlite3
+
+    db_path = tmp_path / "events.db"
+    results = [
+        {"path": "a.md", "score": 0.5, "sources": ["keyword", "semantic"]},
+        {"path": "b.md", "score": 0.2, "sources": ["semantic"]},
+    ]
+    log_search_event(db_path, "my query", 10, ["02-Builder"], soft_fail=False, results=results)
+
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute(
+            "SELECT query, limit_n, areas, soft_fail, result_count, results_json FROM search_events"
+        ).fetchone()
+    finally:
+        conn.close()
+    assert row[0] == "my query"
+    assert row[1] == 10
+    assert json.loads(row[2]) == ["02-Builder"]
+    assert row[3] == 0
+    assert row[4] == 2
+    logged = json.loads(row[5])
+    assert [r["rank"] for r in logged] == [1, 2]
+    assert logged[0]["path"] == "a.md"
+
+
+def test_log_search_event_appends(tmp_path):
+    import sqlite3
+
+    db_path = tmp_path / "events.db"
+    log_search_event(db_path, "q1", 5, None, soft_fail=True, results=[])
+    log_search_event(db_path, "q2", 5, None, soft_fail=False, results=[])
+
+    conn = sqlite3.connect(db_path)
+    try:
+        count = conn.execute("SELECT COUNT(*) FROM search_events").fetchone()[0]
+    finally:
+        conn.close()
+    assert count == 2

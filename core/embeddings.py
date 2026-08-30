@@ -8,9 +8,11 @@ standalone script that only needs VAULTEX_PATH, not the full server env
 """
 
 import asyncio
+import json
 import logging
 import re
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
 try:
@@ -33,7 +35,7 @@ _model = None
 
 
 def get_model() -> "SentenceTransformer":
-    """Loaded once, on first use, then cached — shared by semantic_search_vaultex
+    """Loaded once, on first use, then cached — shared by the `search` tool
     and the write-time reindex hook so the process only ever holds one copy."""
     global _model
     if _model is None:
@@ -114,8 +116,8 @@ def find_related(conn: sqlite3.Connection, model: "SentenceTransformer", vault_p
     note_path, if given, is excluded from its own results (pass None for a
     not-yet-saved note). Returns at most `limit` notes within
     `max_distance` cosine distance (lower = more similar); mirrors
-    semantic_search_vaultex's query shape in core/tools/search.py, just
-    factored out for reuse from core/vault.py.
+    _semantic_search's query shape in core/tools/search.py, just factored
+    out for reuse from core/vault.py.
     """
     query_embedding = model.encode(
         f"Represent this sentence for searching relevant passages: {text[:2000]}",
@@ -141,6 +143,56 @@ def find_related(conn: sqlite3.Connection, model: "SentenceTransformer", vault_p
         if len(results) >= limit:
             break
     return results
+
+
+SEARCH_EVENTS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS search_events (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts            TEXT    NOT NULL,
+    query         TEXT    NOT NULL,
+    limit_n       INTEGER NOT NULL,
+    areas         TEXT,
+    soft_fail     INTEGER NOT NULL DEFAULT 0,
+    result_count  INTEGER NOT NULL,
+    results_json  TEXT    NOT NULL
+)
+"""
+
+
+def log_search_event(db_path: Path, query: str, limit_n: int, areas: list[str] | None,
+                     soft_fail: bool, results: list[dict]) -> None:
+    """Append one `search` call to the search_events table in
+    vault_embeddings.db — raw material for a future Learning-to-Rank
+    ranker. Reuses the embeddings DB file (created here if absent) rather
+    than adding a second store; only needs stdlib sqlite3, no extension.
+
+    Callers gate this on the SEARCH_LOG env flag and swallow exceptions —
+    search must never fail because logging did.
+    """
+    rows = [
+        {"path": r["path"], "score": r["score"], "sources": r["sources"], "rank": i}
+        for i, r in enumerate(results, start=1)
+    ]
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(SEARCH_EVENTS_SCHEMA)
+        conn.execute(
+            "INSERT INTO search_events "
+            "(ts, query, limit_n, areas, soft_fail, result_count, results_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                query,
+                limit_n,
+                json.dumps(areas) if areas else None,
+                int(soft_fail),
+                len(results),
+                json.dumps(rows, separators=(",", ":")),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def delete_path(conn: sqlite3.Connection, path: str) -> None:
