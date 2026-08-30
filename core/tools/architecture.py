@@ -1,5 +1,8 @@
 """Solution Architecture tools (professional area): decisions, gap analysis, full project context."""
 
+from datetime import date
+
+from ..frontmatter import join, split
 from ..mcp_app import mcp, write_tool
 from ..taxonomy import project_subfolders
 from ..vault import (
@@ -41,10 +44,30 @@ def get_architecture_decisions(project_name: str | None = None, professional: bo
     return read_capped(paths, limit=limit)
 
 
+def _apply_provenance(content: str, source_episodic: str | None, agents: list[str] | None) -> str:
+    """Phase 2 provenance: stamp `source_episodic`/`agents`/`decided` into the
+    note's frontmatter. No-op (content unchanged) when neither is given."""
+    if not source_episodic and not agents:
+        return content
+    if source_episodic and not safe_path(source_episodic).is_file():
+        raise ValueError(
+            f"source_episodic points at a note that doesn't exist: {source_episodic!r}."
+        )
+    fm, body = split(content)
+    fm.setdefault("type", "decision")
+    if source_episodic:
+        fm["source_episodic"] = source_episodic
+    if agents:
+        fm["agents"] = agents
+    fm.setdefault("decided", date.today().isoformat())
+    return join(fm, body)
+
+
 @write_tool
 def save_decision(title: str, content: str, professional: bool = False,
                    project_name: str | None = None, subfolder: str | None = None,
-                   overwrite: bool = False) -> str:
+                   overwrite: bool = False, source_episodic: str | None = None,
+                   agents: list[str] | None = None) -> str:
     """Save an architecture/product decision note.
 
     professional=True writes to the configured professional-decisions folder.
@@ -55,10 +78,15 @@ def save_decision(title: str, content: str, professional: bool = False,
     none configured, or when professional=True.
     Pass overwrite=True to update an existing note in place instead of erroring.
 
+    source_episodic / agents: Phase 2 provenance. When either is given, the
+    frontmatter gets `source_episodic` (must resolve to a real note),
+    `agents`, and a `decided` date; omit both and the note is written as-is.
+
     Content must include a `**Decided:**` and a `**What it means:**` section —
     if either is missing, the note is rejected with a message naming what to add.
     """
     verify_sections(content, ["**Decided:**", "**What it means:**"])
+    content = _apply_provenance(content, source_episodic, agents)
     if professional:
         if subfolder is not None:
             raise ValueError("`subfolder` only applies to Builder projects (professional=False)")

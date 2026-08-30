@@ -17,6 +17,7 @@ from ..vault import (
     validate_limit,
     write,
 )
+from .episodic import recent_episodic_paths
 
 
 def project_root(project_name: str, professional: bool) -> Path:
@@ -26,15 +27,23 @@ def project_root(project_name: str, professional: bool) -> Path:
 
 
 @mcp.tool()
-def get_project_context(project_name: str, professional: bool = False, limit: int = 10) -> list[dict]:
+def get_project_context(project_name: str, professional: bool = False, limit: int = 10,
+                        include_episodic: bool = False, episodic_days: int = 7) -> list[dict]:
     """Gather notes for a project (Builder project by default, or a
     Solution-Architecture project when professional=True), most-recently
     modified first, capped at `limit` notes. Pass a bigger `limit` for
-    older notes, or use read_note for a specific known path."""
+    older notes, or use read_note for a specific known path.
+
+    include_episodic=True also appends recent episodic notes for this project
+    (see get_episodic_context), same {path, content} shape; episodic_days is
+    their look-back window (<=0 for none). Requires the `episodic` role."""
     validate_limit(limit)
     root_rel = project_root(project_name, professional)
     check_area_allowed(root_rel)
-    return read_capped(iter_markdown(root_rel), limit=limit)
+    notes = read_capped(iter_markdown(root_rel), limit=limit)
+    if include_episodic:
+        notes += read_capped(recent_episodic_paths(project_name, episodic_days), limit=limit)
+    return notes
 
 
 @mcp.tool()

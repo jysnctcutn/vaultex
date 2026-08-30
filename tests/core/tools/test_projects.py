@@ -1,7 +1,18 @@
+import uuid
+from pathlib import Path
+
 import pytest
 
+import core.tools.episodic as episodic_mod
 from core.tools.projects import get_feature_context, get_project_context, update_feature
 from core.vault import safe_path, write
+
+
+@pytest.fixture
+def episodic_root(monkeypatch):
+    root = Path(f"02-Builder/Episodic-{uuid.uuid4().hex[:8]}")
+    monkeypatch.setattr(episodic_mod, "EPISODIC", root)
+    yield root
 
 
 def test_get_project_context_lists_project_notes():
@@ -49,3 +60,25 @@ def test_get_feature_context_includes_sibling_architecture_and_decisions():
 def test_update_feature_rejects_subfolder_when_professional():
     with pytest.raises(ValueError, match="only applies to Builder projects"):
         update_feature("PCTestProf", "Widget", "content", professional=True, subfolder="architecture")
+
+
+def test_get_project_context_default_excludes_episodic(episodic_root):
+    write(safe_path("02-Builder/Projects/EpiExcl/Notes.md"), "durable note", overwrite=True)
+    episodic_mod.log_event("EpiExcl", "event", "a session event")
+    results = get_project_context("EpiExcl")
+    assert all("Episodic" not in r["path"] for r in results)
+
+
+def test_get_project_context_include_episodic_appends_episodic_notes(episodic_root):
+    write(safe_path("02-Builder/Projects/EpiInc/Notes.md"), "durable note", overwrite=True)
+    episodic_mod.log_event("EpiInc", "event", "a session event")
+    results = get_project_context("EpiInc", include_episodic=True)
+    paths = [r["path"] for r in results]
+    assert any("EpiInc/Notes.md" in p for p in paths)
+    assert any(str(episodic_root) in p for p in paths)
+
+
+def test_get_project_context_include_episodic_requires_configured_role(monkeypatch):
+    monkeypatch.setattr(episodic_mod, "EPISODIC", None)
+    with pytest.raises(Exception, match="not configured|isn't configured"):
+        get_project_context("AnyProj", include_episodic=True)

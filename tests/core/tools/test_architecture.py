@@ -9,7 +9,7 @@ from core.tools.architecture import (
     get_tech_analysis_history,
     save_decision,
 )
-from core.vault import safe_path, write
+from core.vault import read, safe_path, write
 
 
 @pytest.fixture
@@ -40,6 +40,36 @@ def test_save_decision_professional_writes_into_decisions_root(professional_root
 def test_save_decision_builder_requires_project_name():
     with pytest.raises(ValueError, match="project_name is required"):
         save_decision("Title", "**Decided:** x\n**What it means:** y", professional=False)
+
+
+def test_save_decision_without_provenance_writes_content_verbatim(professional_roots):
+    body = "**Decided:** x\n**What it means:** y"
+    path = save_decision("No Prov", body, professional=True)
+    assert read(safe_path(path)) == body
+
+
+def test_save_decision_stamps_provenance_frontmatter(professional_roots):
+    src = "02-Builder/Episodic/2026-08/2026-08-27-T1200-session-thing.md"
+    write(safe_path(src), "session note", overwrite=True)
+    path = save_decision(
+        "With Prov", "**Decided:** x\n**What it means:** y", professional=True,
+        source_episodic=src, agents=["dev", "ba"],
+    )
+    content = read(safe_path(path))
+    assert content.startswith("---\n")
+    assert f"source_episodic: {src}" in content
+    assert "type: decision" in content
+    assert "- dev" in content and "- ba" in content
+    assert "decided:" in content
+    assert "**Decided:** x" in content
+
+
+def test_save_decision_rejects_dangling_source_episodic(professional_roots):
+    with pytest.raises(ValueError, match="doesn't exist"):
+        save_decision(
+            "Bad Prov", "**Decided:** x\n**What it means:** y", professional=True,
+            source_episodic="02-Builder/Episodic/nope.md",
+        )
 
 
 def test_get_architecture_decisions_professional_default_root(professional_roots):
