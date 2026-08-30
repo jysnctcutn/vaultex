@@ -18,6 +18,8 @@ precedence over `.env`, so a one-off `FOO=bar python3 server.py` still works.
     RATE_LIMIT_WINDOW_SECONDS=60  # sliding window size, in seconds
     AUTO_LINK_ON_SAVE=true        # append related-notes links to brand-new notes
                                     # (no-op unless semantic search is set up)
+    SEARCH_LOG=false              # log every `search` call to a search_events
+                                    # table in vault_embeddings.db (future LTR)
     OAUTH_ISSUER_URL=        # set only for Docker/Tailscale remote deployments —
                               # e.g. https://<host>.<tailnet>.ts.net — enables the
                               # self-hosted OAuth 2.1 flow; unset = today's
@@ -94,6 +96,12 @@ EXCLUDED_AREAS = {
 # notes only, conservative distance threshold), but this is a full off
 # switch that needs no change to any write tool's signature.
 AUTO_LINK_ON_SAVE = os.environ.get("AUTO_LINK_ON_SAVE", "true").strip().lower() in {"1", "true", "yes"}
+
+# Opt-in: log every `search` call (query, params, fused top results) to a
+# search_events table in vault_embeddings.db, as raw material for a future
+# Learning-to-Rank ranker. Best-effort and off by default — a logging
+# failure never breaks search, and nothing consumes the table yet.
+SEARCH_LOG = os.environ.get("SEARCH_LOG", "").strip().lower() in {"1", "true", "yes"}
 
 # Phase 2 of the security progression: when true, write-capable tools are
 # never registered at all (they won't even appear in tools/list), not just

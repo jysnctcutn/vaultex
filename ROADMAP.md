@@ -42,8 +42,12 @@ see [CONTRIBUTING.md](CONTRIBUTING.md) if you want to help with any of it.
   Fusion as its blend method (see Shipped). Replacing the final ranking
   step with a learned model (linear or gradient-boosted tree over features
   from both retrievers) is the later upgrade; candidate generation stays
-  the same, so it's a near drop-in with RRF kept as fallback. Gated on
-  real query volume and a relevance signal — not started.
+  the same, so it's a near drop-in with RRF kept as fallback. The capture
+  layer is done — `SEARCH_LOG=1` logs every `search` call to a
+  `search_events` table in `vault_embeddings.db`. Still gated on real query
+  volume and a relevance signal before the ranker itself is built;
+  implicit-feedback (`next_tool`/`next_path`) and explicit `label` columns
+  are the next capture step when that happens.
 - **Richer custom categories** — today's `taxonomy.json` custom categories
   are a simple list+create pattern only, no professional/builder split, no
   per-project subfolders, no sibling-file reads. New scope if richer
@@ -56,14 +60,7 @@ see [CONTRIBUTING.md](CONTRIBUTING.md) if you want to help with any of it.
   (`infer_area()`) currently only applies to `save_brainstorm`, since the
   other write tools already have deterministic taxonomy-role routing.
   Could extend if a real need shows up.
-- **OpenSSF Best Practices Gold** — Silver is in progress as of this
-  roadmap's writing (governance docs, code of conduct, stricter static
-  analysis, and expanded test coverage underway). Gold is the aspiration
-  beyond it, but it's not purely a checklist away: it structurally requires
-  a second, unaffiliated significant contributor and two-person code
-  review on 50%+ of changes — neither of which exist yet for a
-  solo-maintained project. Realistically blocked on the project actually
-  growing a contributor base, not on more solo effort.
+
 
 ## Explicitly not planned
 - **Obsidian plugin** — sync mechanics, push-only vs. in-app panel, and

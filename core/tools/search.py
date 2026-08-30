@@ -3,8 +3,8 @@
 import sqlite3
 from pathlib import Path
 
-from ..config import EMBEDDINGS_DB_PATH, EXCLUDED_AREAS, VAULT_PATH, logger
-from ..embeddings import _SEMANTIC_DEPS_AVAILABLE, get_model
+from ..config import EMBEDDINGS_DB_PATH, EXCLUDED_AREAS, SEARCH_LOG, VAULT_PATH, logger
+from ..embeddings import _SEMANTIC_DEPS_AVAILABLE, get_model, log_search_event
 from ..mcp_app import mcp
 from ..vault import iter_markdown, read, safe_path, top_level_area, validate_limit
 
@@ -137,8 +137,9 @@ def search(query: str, areas: list[str] | None = None, limit: int = 10) -> list[
 
     keyword_results = _grep(query, areas, pool)
 
+    semantic_ran = _SEMANTIC_DEPS_AVAILABLE and EMBEDDINGS_DB_PATH.exists()
     semantic_results: list[dict] = []
-    if _SEMANTIC_DEPS_AVAILABLE and EMBEDDINGS_DB_PATH.exists():
+    if semantic_ran:
         semantic_results = _semantic_search(query, pool)
         if areas:
             prefixes = tuple(f"{a.rstrip('/')}/" for a in areas)
@@ -164,7 +165,7 @@ def search(query: str, areas: list[str] | None = None, limit: int = 10) -> list[
     _fuse(semantic_results, "semantic")
 
     ranked = sorted(scores, key=lambda p: (-scores[p], p))
-    return [
+    results = [
         {
             "path": path,
             "heading": headings.get(path),
@@ -174,3 +175,11 @@ def search(query: str, areas: list[str] | None = None, limit: int = 10) -> list[
         }
         for path in ranked[:limit]
     ]
+
+    if SEARCH_LOG:
+        try:
+            log_search_event(EMBEDDINGS_DB_PATH, query, limit, areas, not semantic_ran, results)
+        except Exception:
+            logger.debug("search_events logging failed", exc_info=True)
+
+    return results

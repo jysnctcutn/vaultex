@@ -1,3 +1,6 @@
+import json
+import sqlite3
+
 import pytest
 
 import core.tools.search as search_mod
@@ -244,3 +247,60 @@ def test_search_scoped_to_areas(monkeypatch, tmp_path):
     results = search("scoped-hybrid-xyz", areas=["03-Knowledge"], limit=10)
     assert results
     assert all(r["path"].startswith("03-Knowledge/") for r in results)
+
+
+# --- search_events logging (SEARCH_LOG, prep for future LTR) ---
+
+
+def test_search_logs_event_when_enabled(monkeypatch, tmp_path):
+    write(safe_path("log-me.md"), "loggable-token body", overwrite=True)
+    db_path = tmp_path / "events.db"
+    monkeypatch.setattr(search_mod, "SEARCH_LOG", True)
+    monkeypatch.setattr(search_mod, "_SEMANTIC_DEPS_AVAILABLE", False)
+    monkeypatch.setattr(search_mod, "EMBEDDINGS_DB_PATH", db_path)
+
+    results = search("loggable-token", limit=7)
+
+    conn = sqlite3.connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT query, limit_n, areas, soft_fail, result_count, results_json FROM search_events"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert len(rows) == 1
+    query, limit_n, areas, soft_fail, result_count, results_json = rows[0]
+    assert query == "loggable-token"
+    assert limit_n == 7
+    assert areas is None
+    assert soft_fail == 1  # no semantic deps -> keyword-only fallback
+    assert result_count == len(results)
+    logged = json.loads(results_json)
+    assert logged[0]["path"] == results[0]["path"]
+    assert logged[0]["rank"] == 1
+    assert set(logged[0]) == {"path", "score", "sources", "rank"}
+
+
+def test_search_does_not_log_when_disabled(monkeypatch, tmp_path):
+    write(safe_path("no-log.md"), "quiet-token body", overwrite=True)
+    db_path = tmp_path / "no-events.db"
+    monkeypatch.setattr(search_mod, "SEARCH_LOG", False)
+    monkeypatch.setattr(search_mod, "_SEMANTIC_DEPS_AVAILABLE", False)
+    monkeypatch.setattr(search_mod, "EMBEDDINGS_DB_PATH", db_path)
+
+    search("quiet-token", limit=5)
+    assert not db_path.exists()
+
+
+def test_search_logging_failure_is_swallowed(monkeypatch, tmp_path):
+    write(safe_path("resilient.md"), "resilient-token body", overwrite=True)
+    monkeypatch.setattr(search_mod, "SEARCH_LOG", True)
+    monkeypatch.setattr(search_mod, "_SEMANTIC_DEPS_AVAILABLE", False)
+    monkeypatch.setattr(search_mod, "EMBEDDINGS_DB_PATH", tmp_path / "x.db")
+
+    def _boom(*a, **k):
+        raise sqlite3.OperationalError("disk is full")
+
+    monkeypatch.setattr(search_mod, "log_search_event", _boom)
+    results = search("resilient-token", limit=5)
+    assert any(r["path"] == "resilient.md" for r in results)

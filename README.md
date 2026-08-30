@@ -413,6 +413,7 @@ take precedence, so `FOO=bar python3 server.py` works for one-offs):
 | `LOG_LEVEL` | `info` | Set to `debug` for verbose output (e.g. which files search skips and why) |
 | `VAULT_EMBEDDINGS_DB` | `./vault_embeddings.db` | Override the semantic-search index location |
 | `AUTO_LINK_ON_SAVE` | `true` | `false` disables the automatic "## Related notes" section on brand-new notes (no-op either way until a semantic index exists) |
+| `SEARCH_LOG` | `false` | `true` = log every `search` call (query, params, fused top results) to a `search_events` table in `vault_embeddings.db`. Best-effort; raw material for a future Learning-to-Rank ranker, nothing reads it yet |
 | `RATE_LIMIT_MAX_REQUESTS` | `120` | Requests allowed per source IP per `RATE_LIMIT_WINDOW_SECONDS` |
 | `RATE_LIMIT_WINDOW_SECONDS` | `60` | Sliding window size, in seconds, for the request-rate cap |
 | `OAUTH_ISSUER_URL` | *(unset)* | Set only for remote deployments, e.g. `https://<host>.<tailnet>.ts.net` — enables the self-hosted OAuth 2.1 flow. Unset = today's bearer-token-only behavior, no OAuth routes registered at all |
