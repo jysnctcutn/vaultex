@@ -33,7 +33,7 @@ _model = None
 
 
 def get_model() -> "SentenceTransformer":
-    """Loaded once, on first use, then cached — shared by semantic_search_vaultex
+    """Loaded once, on first use, then cached — shared by the `search` tool
     and the write-time reindex hook so the process only ever holds one copy."""
     global _model
     if _model is None:
@@ -114,8 +114,8 @@ def find_related(conn: sqlite3.Connection, model: "SentenceTransformer", vault_p
     note_path, if given, is excluded from its own results (pass None for a
     not-yet-saved note). Returns at most `limit` notes within
     `max_distance` cosine distance (lower = more similar); mirrors
-    semantic_search_vaultex's query shape in core/tools/search.py, just
-    factored out for reuse from core/vault.py.
+    _semantic_search's query shape in core/tools/search.py, just factored
+    out for reuse from core/vault.py.
     """
     query_embedding = model.encode(
         f"Represent this sentence for searching relevant passages: {text[:2000]}",

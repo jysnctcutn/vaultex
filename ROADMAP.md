@@ -17,6 +17,16 @@ see [CONTRIBUTING.md](CONTRIBUTING.md) if you want to help with any of it.
   `release_note` / `flag_conflict` / `check_note_status` over note
   frontmatter). Follow-ups still open: provenance params on
   `update_feature`, and an agent-identity registry for the `agents:` field.
+- **Blended search (`search` + `grep`)** — `search` is now the
+  default tool: keyword and local-embedding semantic retrieval merged with
+  Reciprocal Rank Fusion (k=60), de-duplicated by path, `score` and
+  `sources` on every result, soft-failing to keyword-only when no semantic
+  index exists. `grep` keeps literal substring lookup as its own
+  tool. This revised the original "keep both retrievers as separate
+  unchanged tools" decision — the standalone `semantic_search_vaultex`
+  tool was folded into `search` as an internal helper, and the `_vaultex`
+  suffix dropped to match the rest of the toolset. Full Learning-to-Rank
+  is still a later upgrade (see Planned).
 
 ## Planned
 - **Section-aware editing** — patch a note by heading or block reference
@@ -28,11 +38,12 @@ see [CONTRIBUTING.md](CONTRIBUTING.md) if you want to help with any of it.
   scanner, splice operations (replace/append/prepend) on the identified
   range, and `createTargetIfMissing` to append a new heading when the
   target isn't found. Not started.
-- **`search_vaultex` / `semantic_search_vaultex` blended tool** — decided:
-  a hybrid tool using Reciprocal Rank Fusion (k=60) over both retrievers,
-  original tools kept unchanged, soft-failing to keyword-only when no
-  semantic index exists. Full Learning-to-Rank is a later upgrade, gated on
-  real query volume and relevance signal. Not yet implemented.
+- **Learning-to-Rank for `search`** — `search` ships with Reciprocal Rank
+  Fusion as its blend method (see Shipped). Replacing the final ranking
+  step with a learned model (linear or gradient-boosted tree over features
+  from both retrievers) is the later upgrade; candidate generation stays
+  the same, so it's a near drop-in with RRF kept as fallback. Gated on
+  real query volume and a relevance signal — not started.
 - **Richer custom categories** — today's `taxonomy.json` custom categories
   are a simple list+create pattern only, no professional/builder split, no
   per-project subfolders, no sibling-file reads. New scope if richer

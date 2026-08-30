@@ -4,7 +4,7 @@ Vaultex — Vault Embeddings Indexer
 Standalone script (kept separate from server.py per the semantic search
 architecture decision) that walks the vault, chunks each note, embeds the
 chunks with a local sentence-transformers model, and stores the vectors in
-a sqlite-vec database for semantic_search_vaultex to query.
+a sqlite-vec database for the `search` tool's semantic half to query.
 
 Run:
     export VAULTEX_PATH=/path/to/vaultex

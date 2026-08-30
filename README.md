@@ -168,9 +168,9 @@ only get filled in during Path B, later.
 episodic sessions/events, open questions, etc. rather than doing free-form
 search — need to know which folders in *your* vault to use. Skip this stage
 entirely and the server still runs fine: those 18 tools just report "not
-configured" until you come back to this. `search_vaultex`,
-`semantic_search_vaultex`, `read_note`, and `save_brainstorm` never need
-this — they work on any vault immediately.
+configured" until you come back to this. `search`, `grep`,
+`read_note`, and `save_brainstorm` never need this — they work on any
+vault immediately.
 
 ```bash
 python3 onboard.py
@@ -201,7 +201,7 @@ your vault.
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python3 index_vault.py   # optional — enables semantic_search_vaultex
+.venv/bin/python3 index_vault.py   # optional — adds semantic ranking to `search`
 .venv/bin/python3 server.py
 ```
 
@@ -371,7 +371,7 @@ core/
     provider.py        VaultexOAuthProvider — implements OAuthAuthorizationServerProvider
     login.py           The single-user password-gate consent screen (/login)
   tools/
-    search.py          read_note, search_vaultex, semantic_search_vaultex
+    search.py          read_note, search (RRF hybrid), grep
     builder.py         get_app_ideas, create_app_idea
     projects.py        get_project_context, get_feature_context, update_feature
     architecture.py    get_architecture_decisions, save_decision,
@@ -431,8 +431,8 @@ Every response also carries a small set of baseline security headers
 
 ### Semantic search (optional)
 
-Keyword search (`search_vaultex`) works out of the box. For meaning-based
-search (`semantic_search_vaultex`), `index_vault.py` builds the local
+`search` and `grep` work out of the box on keyword alone. To add
+the semantic half of `search`'s ranking, `index_vault.py` builds the local
 embeddings index — see "Quick start" above for the exact command in each
 path (`--full` forces a complete re-index instead of the incremental
 default). Produces `vault_embeddings.db`, which stores raw vault text and is
@@ -458,8 +458,8 @@ rather than guessing.
 | Tool | Read/Write | What it does |
 |---|---|---|
 | `read_note` | read | Full verbatim content of one note by path |
-| `search_vaultex` | read | Keyword search across titles and content |
-| `semantic_search_vaultex` | read | Meaning-based search via local embeddings |
+| `search` | read | Default search — keyword + local-embedding semantic, merged with Reciprocal Rank Fusion (k=60); each hit carries `score` and `sources`; soft-fails to keyword-only with no embeddings index |
+| `grep` | read | Literal substring search across titles and content — no ranking, no embeddings; for exact strings |
 | `get_app_ideas` | read | List app ideas under the configured `builder_ideas` folder |
 | `create_app_idea` | write | Create a new app idea note |
 | `get_project_context` | read | All notes for a Builder or Solution-Architecture project; `include_episodic=True` also appends recent episodic notes for it |
@@ -487,10 +487,10 @@ rather than guessing.
 | `flag_conflict` | write | Mark a note `status: conflict`, record `conflicts_with`, and append a `## Conflict (<date>)` body section |
 | `check_note_status` | read | A note's `locked_by` / `locked_at` / `status` / `conflicts_with` without reading the whole note — the pre-edit check |
 
-18 of the 29 tools (everything except `read_note`, `search_vaultex`,
-`semantic_search_vaultex`, `save_brainstorm`, `get_tags`,
-`update_frontmatter`, `move_note`, `claim_note`, `release_note`,
-`flag_conflict`, and `check_note_status`) resolve through
+18 of the 29 tools (everything except `read_note`, `search`, `grep`,
+`save_brainstorm`, `get_tags`, `update_frontmatter`, `move_note`,
+`claim_note`, `release_note`, `flag_conflict`, and `check_note_status`)
+resolve through
 `taxonomy.json` — see "Folder taxonomy" below. Any custom categories from
 `taxonomy.json` add their own `get_<key>`/`create_<key>_note` tools to this
 list at server startup. `get_tags`/`update_frontmatter` work on any note by
