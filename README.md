@@ -5,27 +5,34 @@
 ╚██╗ ██╔╝██╔══██║██║   ██║██║     ██║   ██╔══╝   ██╔██╗ 
  ╚████╔╝ ██║  ██║╚██████╔╝███████╗██║   ███████╗██╔╝ ██╗
   ╚═══╝  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝   ╚══════╝╚═╝  ╚═╝ MCP
-Local-first and free for individuals.
-No Cloud. No Subscriptions. 
-Your Obsidian/MD vault in any MCP client.
+The local-first context layer for AI agents.
+No Cloud. No Subscriptions. One context. Every AI. 
+MIT licensed. Free for individuals.
 ```
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14169/badge)](https://www.bestpractices.dev/projects/14169)&nbsp;
-[![CI](https://github.com/jysnctcutn/vaultex/actions/workflows/ci.yml/badge.svg)](https://github.com/jysnctcutn/vaultex/actions/workflows/ci.yml)&nbsp;
 [![Security](https://github.com/jysnctcutn/vaultex/actions/workflows/security.yml/badge.svg)](https://github.com/jysnctcutn/vaultex/actions/workflows/security.yml)&nbsp;
+[![MCP Server](https://badge.mcpx.dev?type=server)](https://modelcontextprotocol.io/)&nbsp;
+[![CI](https://github.com/jysnctcutn/vaultex/actions/workflows/ci.yml/badge.svg)](https://github.com/jysnctcutn/vaultex/actions/workflows/ci.yml)&nbsp;
 [![Lint](https://github.com/jysnctcutn/vaultex/actions/workflows/lint.yml/badge.svg)](https://github.com/jysnctcutn/vaultex/actions/workflows/lint.yml)&nbsp;
 [![License](https://img.shields.io/github/license/jysnctcutn/vaultex)](LICENSE)&nbsp;
 [![Python 3.14](https://img.shields.io/badge/python-3.14-blue?logo=python&logoColor=white)](https://www.python.org/) 
 ---
 
-## VAULTEX MCP
+## VAULTEX MCP - local-first context layer for AI agents
 
-Exposes an Obsidian vault to AI clients (Claude, GPT, other MCP-speaking
-agents) as a set of *meaningful* operations — search, read a note, save a
-decision, gather everything about a project — rather than raw filesystem
-access. It is deliberately **not** a `read_file` / `write_file` /
-`list_directory` server: every tool goes through a shared path-safety layer
-that blocks traversal outside the vault and can hide entire top-level areas
-(e.g. client/employer work) from a given server instance.
+Vaultex gives AI agents a persistent, local-first context layer backed by
+your Markdown vault. Instead of treating your knowledge base as a raw
+filesystem, it exposes *meaningful* context operations — search, read a
+note, save a decision, gather everything about a project, and record an
+agent's working trail so the next session, in any client, picks up where
+the last one left off.
+
+It is deliberately **not** a `read_file` / `write_file` /
+`list_directory` server: every operation goes through a shared path-safety
+layer that blocks traversal outside the vault and can hide entire
+top-level areas (e.g. client or employer work) from a given server
+instance. Your context stays on your machine or your own tailnet; any
+MCP-compatible client reaches only the context you choose to share.
 
 ![Vaultex demo](./vaultex.gif)
 
@@ -33,32 +40,38 @@ that blocks traversal outside the vault and can hide entire top-level areas
 [Quick start](#quick-start) ·
 [Connecting AI clients](#connecting-ai-clients-claude-chatgpt-grok) ·
 [Where this fits](#where-this-fits) ·
-[Manual context handover vs. one tool call](#manual-context-handover-vs-one-tool-call) ·
-[How it's laid out](#how-its-laid-out) ·
-[Configuration reference](#configuration-reference) ·
-[Available tools](#available-tools) ·
-[Folder taxonomy](#folder-taxonomy) ·
-[Security model](#security-model) ·
-[Remote access](#remote-access-optional) ·
+[Documentation](#documentation) ·
 [Upgrading and uninstalling](#upgrading-and-uninstalling) ·
 [Contributing](#contributing)
 
+Deeper reference — tools, configuration, taxonomy, security model, remote
+access — lives in [`docs/`](docs/), linked from
+[Documentation](#documentation) below.
+
 ## Features
 
-- **Meaningful operations, not raw filesystem access** — search, read a note,
+- **A context layer, not raw filesystem access** — search, read a note,
   save a decision, gather everything about a project; no generic
   `read_file`/`write_file`/`list_directory` tools.
+- **Agent memory lifecycle** — an agent opens an episodic session, writes a
+  structured trail as it works, then distills the high-signal parts into
+  durable project notes with provenance back to the session they came from.
+  Plain Markdown throughout, no vector-only second store.
+- **Built for multiple agents** — `claim_note` / `release_note` /
+  `flag_conflict` put advisory locks and conflict markers in a note's
+  frontmatter so concurrent agents don't clobber each other.
 - **Path-safety by construction** — every tool routes through a shared
   boundary that blocks `..` traversal and can hide entire top-level folders
   (e.g. client/employer work) per server instance.
-- **16 built-in tools** spanning search, app ideas, project context,
-  architecture decisions, tagging, and brainstorm capture — see "Available
-  tools" below.
+- **29 built-in tools** spanning search, project and architecture context,
+  episodic memory, distillation, multi-agent coordination, tagging, and
+  brainstorm capture — see [docs/tools.md](docs/tools.md).
 - **Folder taxonomy** — map your vault's own folders (or scaffold PARA) once
   via `onboard.py`; define custom categories that become their own
   `get`/`create` tools automatically at startup.
-- **Local semantic search** — optional embeddings index (`index_vault.py`),
-  runs entirely on your machine, no cloud calls.
+- **Local semantic search** — optional embeddings index (`index_vault.py`);
+  keyword + embeddings merged with Reciprocal Rank Fusion, runs entirely on
+  your machine, no cloud calls.
 - **Two deployment paths** — fully local with no Docker/Tailscale (Path A),
   or self-hosted with a bundled Tailscale sidecar for remote access from
   Claude web/mobile (Path B).
@@ -178,8 +191,9 @@ python3 onboard.py
 
 Walks your vault's existing folders, lets you map each of the 9 built-in
 roles (or skip it), optionally scaffolds PARA folders, and lets you define
-your own categories beyond the built-in 9. Full detail in "Folder taxonomy"
-further down. Safe to run later instead — nothing here blocks stage 4.
+your own categories beyond the built-in 9. Full detail in
+[docs/taxonomy.md](docs/taxonomy.md). Safe to run later instead — nothing
+here blocks stage 4.
 
 ### 4. Pick a path and run it
 
@@ -255,7 +269,8 @@ Now:
 Restarting later is just `docker compose up -d` (no `--build` unless you
 changed the code) — the vault mount, the search index, the OAuth store, the
 taxonomy config, and the Funnel config all persist across restarts. See
-"Remote access" below for what to do if something looks stuck.
+[docs/remote-access.md](docs/remote-access.md) for what to do if something
+looks stuck.
 
 ### Connecting AI clients (Claude, ChatGPT, Grok)
 
@@ -279,7 +294,7 @@ There are two ways in:
 
 ```
                         VAULTEX
-                     (Obsidian vault)
+                  (Your Markdown vault)
                             │
                        MCP server
                    (server.py + core/)
@@ -288,10 +303,12 @@ There are two ways in:
              │                                         │
   (Path A - 1 Machine)                        (Path B - Cross device)
 (local, direct — no tunnel needed)                Tailscale Funnel
-          │                                   (sidecar, in docker-compose)
-          │                                            │                    
+              │                             (sidecar, in docker-compose)
+              │                                        │                    
 Claude Code + Desktop GUI                              │
-                                         Claude (cli /web / mobile) + Obsidian
+                                      Grok, Claude, GPT and other AI Clients 
+                                            (cli/web/ide/mobile/agents) 
+                                             Obsidian/Noteable/Logseq
 ```
 
 Local access (this machine) talks to `server.py` directly over localhost —
@@ -301,482 +318,26 @@ a sidecar container in `docker-compose.yml`, so nothing needs installing on
 the host — and authenticates via OAuth 2.1, which `server.py` implements
 itself (`core/oauth/`). No third-party gateway sits in front of it.
 
-## Manual context handover vs. one tool call
+## Related Documentation
 
-Easy to *claim* this beats copy-pasting between AI clients; here's a
-measurement instead of a marketing number.
+Deeper reference lives in [`docs/`](docs/):
 
-**The scenario**: you close a chat in one AI client and open a different
-one — Claude Desktop today, Claude Code tomorrow, ChatGPT or Claude on your
-phone next week. None of them share memory with each other. Without
-Vaultex, reconstructing "what were we doing on this project" means manually
-finding and pasting in the relevant notes, every time you switch.
-
-[`benchmarks/context_handover_benchmark.py`](benchmarks/context_handover_benchmark.py)
-measures this directly instead of guessing a percentage. It builds a
-synthetic vault (fake "Acme-Redesign" project, not real data) with notes
-spread across three folders the way a real Solution-Architecture project
-actually accumulates them — project notes, tech-analysis notes, architecture
-notes — plus two unrelated notes sitting in those same folders, to check
-that filtering by project actually works rather than just counting files.
-It then runs the real `get_solution_architecture_context()` tool code
-against that fixture — not a simulation of it. Reproduce it yourself:
-
-```bash
-python3 benchmarks/context_handover_benchmark.py
-```
-
-Measured result for that fixture, one handover:
-
-| | Manual (open + copy each note) | Vaultex |
-|---|---|---|
-| Folders you need to know about | 3 | 0 — resolved from `taxonomy.json` |
-| Files to individually open and paste | 6 | 0 |
-| Unrelated notes you must notice and skip | 2 | 0 — filtered automatically by project name |
-| Round-trips to reassemble context | — | 1 |
-
-That gap repeats every time you switch clients without shared memory:
-
-| Clients used across a week | Manual file-copies | Vaultex tool calls |
-|---|---|---|
-| 1 | 6 | 1 |
-| 2 | 12 | 2 |
-| 3 | 18 | 3 |
-| 5 | 30 | 5 |
-
-This is not a token or speed benchmark — the AI reads the same content
-either way. What it removes is the manual labor of finding and re-pasting
-that content, and the chance of missing or misfiling a note, not the
-reading itself. The ratio (files-per-project vs. 1 tool call) will vary
-with how many notes your own projects accumulate; rerun the script against
-your own taxonomy shape to get your own numbers.
-
-## How it's laid out
-
-```
-server.py              Entrypoint — env validation happens on import, then uvicorn.run()
-onboard.py              Interactive taxonomy.json setup wizard — see "Folder taxonomy" below
-core/
-  config.py            Env vars, startup validation, logging setup
-  taxonomy.py          Loads taxonomy.json: role paths + custom category definitions
-  vault.py             Path-safety boundary: safe_path, iter_markdown, read/write, move, area roots;
-                       also auto-linking (_auto_link), placement inference (infer_area),
-                       and per-project subfolder validation (resolve_project_subfolder)
-  frontmatter.py       Minimal YAML frontmatter split/join, used by tools/tags.py
-  mcp_app.py           The MCPServer instance, OAuth wiring, write_tool/register_tool gates
-  middleware.py        Bearer-token auth (non-OAuth fallback) + baseline security headers
-  app.py               Wires tools + middleware into the Starlette ASGI app
-  oauth/               Self-hosted OAuth 2.1 authorization server — see "Remote access" below
-    store.py           SQLite persistence: clients, authorization codes, access/refresh tokens
-    provider.py        VaultexOAuthProvider — implements OAuthAuthorizationServerProvider
-    login.py           The single-user password-gate consent screen (/login)
-  tools/
-    search.py          read_note, search (RRF hybrid), grep
-    builder.py         get_app_ideas, create_app_idea
-    projects.py        get_project_context, get_feature_context, update_feature
-    architecture.py    get_architecture_decisions, save_decision,
-                       get_tech_analysis_history, get_solution_architecture_context
-    capture.py         save_brainstorm
-    episodic.py        log_event, start_session, update_session, close_session,
-                       get_episodic_context
-    open_questions.py  save_open_question, get_open_questions
-    distill.py         distill_session, apply_distillation — apply is opt-in via ENABLE_DISTILL_APPLY
-    coordination.py    claim_note, release_note, flag_conflict, check_note_status
-    tags.py            get_tags, update_frontmatter
-    move.py            move_note — opt-in via ENABLE_NOTE_MOVE, gated separately from write_tool
-    custom.py          Dynamically registers a get/create pair per taxonomy.json custom category
-index_vault.py         Standalone script: builds/refreshes the local semantic-search index
-tests/                  pytest suite — see "CI and pre-commit gates" below
-Dockerfile              Image for the vaultex service
-docker-compose.yml      vaultex + a bundled Tailscale sidecar — see "Remote access" below
-```
-
-Each `core/` module owns one concern; `tools/` is grouped by the part of the
-vault a tool touches, not by read vs. write.
-
-## Configuration reference
-
-See "Quick start" above for setup commands. Full list of `.env` variables
-(all loaded automatically via python-dotenv; real exported env vars still
-take precedence, so `FOO=bar python3 server.py` works for one-offs):
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `VAULTEX_PATH` | `./vaultex` | Path to the Obsidian vault this server reads/writes |
-| `MCP_AUTH_TOKEN` | *(required)* | Long random secret; clients send it as `Authorization: Bearer <token>` |
-| `MCP_HOST` | `0.0.0.0` | Bind address |
-| `MCP_PORT` | `8000` | Bind port |
-| `EXCLUDED_AREAS` | *(none)* | Comma-separated top-level folders this instance refuses to touch at all, e.g. `01-Professional` |
-| `READ_ONLY` | `false` | `true` = write tools aren't even registered (not just blocked at call time) |
-| `ENABLE_NOTE_MOVE` | `false` | `true` = registers `move_note`. Gated separately from, on top of, `READ_ONLY` — off by default even in read/write mode |
-| `ENABLE_DISTILL_APPLY` | `false` | `true` = registers `apply_distillation` (distillation's durable write-back). Same gating pattern as `ENABLE_NOTE_MOVE`; `distill_session` stays available regardless |
-| `LOG_LEVEL` | `info` | Set to `debug` for verbose output (e.g. which files search skips and why) |
-| `VAULT_EMBEDDINGS_DB` | `./vault_embeddings.db` | Override the semantic-search index location |
-| `AUTO_LINK_ON_SAVE` | `true` | `false` disables the automatic "## Related notes" section on brand-new notes (no-op either way until a semantic index exists) |
-| `SEARCH_LOG` | `false` | `true` = log every `search` call (query, params, fused top results) to a `search_events` table in `vault_embeddings.db`. Best-effort; raw material for a future Learning-to-Rank ranker, nothing reads it yet |
-| `RATE_LIMIT_MAX_REQUESTS` | `120` | Requests allowed per source IP per `RATE_LIMIT_WINDOW_SECONDS` |
-| `RATE_LIMIT_WINDOW_SECONDS` | `60` | Sliding window size, in seconds, for the request-rate cap |
-| `OAUTH_ISSUER_URL` | *(unset)* | Set only for remote deployments, e.g. `https://<host>.<tailnet>.ts.net` — enables the self-hosted OAuth 2.1 flow. Unset = today's bearer-token-only behavior, no OAuth routes registered at all |
-| `AUTHORIZE_PASSWORD` | *(required if `OAUTH_ISSUER_URL` is set)* | Gates the `/login` consent screen — the single password that authorizes an OAuth client |
-| `OAUTH_STORE_DB` | `./oauth_store.db` | Override where registered clients, authorization codes, and tokens are persisted |
-| `TAXONOMY_JSON_PATH` | `./taxonomy.json` | Override where `taxonomy.json` is read from/written to — mainly for running multiple instances against different taxonomies, or test isolation |
-| `ALLOWED_REDIRECT_HOSTS` | `claude.ai` | Comma-separated hosts an OAuth client's `redirect_uri` must match to complete registration — dynamic client registration is unauthenticated by spec, so this is what stops a random internet client from registering at all |
-
-## Running
-
-Serves MCP over streamable HTTP at `http://<host>:<port>/mcp`, gated by the
-bearer token (and OAuth too, if configured — see "Remote access" below).
-Every response also carries a small set of baseline security headers
-(`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
-`Permissions-Policy`).
-
-### Semantic search (optional)
-
-`search` and `grep` work out of the box on keyword alone. To add
-the semantic half of `search`'s ranking, `index_vault.py` builds the local
-embeddings index — see "Quick start" above for the exact command in each
-path (`--full` forces a complete re-index instead of the incremental
-default). Produces `vault_embeddings.db`, which stores raw vault text and is
-git-ignored on purpose — never commit it.
-
-Once that index exists, every write tool (`save_decision`,
-`save_brainstorm`, `create_app_idea`, `update_feature`, and any custom
-category's `create_<key>_note`) re-embeds the note it just wrote, so the
-index stays current automatically — you only need to rerun `index_vault.py`
-by hand for edits made outside these tools (e.g. editing directly in
-Obsidian) or for the very first build.
-
-It also unlocks two more behaviors, both on brand-new notes only (never on
-an edit to an existing one): a "## Related notes" section gets appended
-linking to close semantic matches (`AUTO_LINK_ON_SAVE=false` to disable),
-and `save_brainstorm` routes near related notes instead of always landing
-in the inbox when no explicit `area` is given — raising a clear error
-naming the candidates if existing notes disagree on where it belongs
-rather than guessing.
-
-## Available tools
-
-| Tool | Read/Write | What it does |
-|---|---|---|
-| `read_note` | read | Full verbatim content of one note by path |
-| `search` | read | Default search — keyword + local-embedding semantic, merged with Reciprocal Rank Fusion (k=60); each hit carries `score` and `sources`; soft-fails to keyword-only with no embeddings index |
-| `grep` | read | Literal substring search across titles and content — no ranking, no embeddings; for exact strings |
-| `get_app_ideas` | read | List app ideas under the configured `builder_ideas` folder |
-| `create_app_idea` | write | Create a new app idea note |
-| `get_project_context` | read | All notes for a Builder or Solution-Architecture project; `include_episodic=True` also appends recent episodic notes for it |
-| `get_feature_context` | read | One feature note plus sibling Architecture/Decisions notes |
-| `update_feature` | write | Create or update a project's feature note |
-| `get_architecture_decisions` | read | List decision notes, professional or per-project |
-| `save_decision` | write | Save an architecture/product decision note; optional `source_episodic` + `agents` stamp provenance frontmatter for agent-originated decisions |
-| `get_tech_analysis_history` | read | List tech-analysis notes, optionally filtered by project |
-| `get_solution_architecture_context` | read | A project's notes + matching tech-analysis + architecture notes |
-| `save_brainstorm` | write | Save a brainstorm/conversation conclusion; auto-routed near related notes if a semantic index exists, else the configured `inbox` folder |
-| `get_tags` | read | A note's frontmatter `tags:` array plus inline `#tag` mentions in the body |
-| `update_frontmatter` | write | Create or update a note's YAML frontmatter (any property, not just tags); never touches the body |
-| `move_note` | write, opt-in | Move/rename a note within the vault — requires `ENABLE_NOTE_MOVE=true` (off by default even in read/write mode); not registered otherwise |
-| `log_event` | write | Append a one-shot episodic event/outcome note under the configured `episodic` folder |
-| `start_session` | write | Open an episodic session note bracketing a multi-turn agent run; returns its path |
-| `update_session` | write | Rewrite an open session's body sections (`What happened` / `Decisions` / `Open questions` / `Artifacts`) in place, so detail lands before close |
-| `close_session` | write | Close a session opened by `start_session` — sets `status: closed`, stamps `ended`, appends `## Outcome` |
-| `get_episodic_context` | read | Recent episodic notes for a project + time window; filter by `kind`/`status` |
-| `save_open_question` | write | Promote a question raised in an agent run into the durable per-project `open_questions` store |
-| `get_open_questions` | read | List a project's open-question notes, optionally filtered by `status` |
-| `distill_session` | read | Bundle a closed session + its project context + the proposal schema for a curator to turn into durable notes |
-| `apply_distillation` | write, opt-in | Write a filled distillation proposal (decisions + open questions, with provenance) and mark the session `promoted` — requires `ENABLE_DISTILL_APPLY=true` and `confirm=True`; not registered otherwise |
-| `claim_note` | write | Claim a note for exclusive editing by an agent — sets `locked_by` / `locked_at`; refuses a foreign lock unless `force=True` |
-| `release_note` | write | Clear a note's `locked_by` / `locked_at` — refuses to release another agent's lock unless `force=True` |
-| `flag_conflict` | write | Mark a note `status: conflict`, record `conflicts_with`, and append a `## Conflict (<date>)` body section |
-| `check_note_status` | read | A note's `locked_by` / `locked_at` / `status` / `conflicts_with` without reading the whole note — the pre-edit check |
-
-18 of the 29 tools (everything except `read_note`, `search`, `grep`,
-`save_brainstorm`, `get_tags`, `update_frontmatter`, `move_note`,
-`claim_note`, `release_note`, `flag_conflict`, and `check_note_status`)
-resolve through
-`taxonomy.json` — see "Folder taxonomy" below. Any custom categories from
-`taxonomy.json` add their own `get_<key>`/`create_<key>_note` tools to this
-list at server startup. `get_tags`/`update_frontmatter` work on any note by
-path and don't go through `taxonomy.json` at all. `move_note` also works on
-any note by path, and — unlike every other write tool — is gated by its own
-`ENABLE_NOTE_MOVE` flag on top of `READ_ONLY`, since relocate-and-possibly-
-overwrite is a riskier capability than an additive write. There's still no
-delete tool: a moved note still exists, just at a different path.
-`apply_distillation` is gated the same way, by `ENABLE_DISTILL_APPLY`, since
-it promotes episodic content into the durable store.
-
-`save_decision` and `update_feature` also accept a `subfolder` parameter for
-Builder projects with subfolders configured in `taxonomy.json`'s
-`project_subfolders` (see "Folder taxonomy" below) — required when the
-project has any configured, omitted otherwise.
-
-New notes created by any write tool above get an automatic "## Related
-notes" section linking to close semantic matches, and `save_brainstorm`
-auto-routes to sit next to related notes rather than always landing in the
-inbox — both no-ops until a semantic index exists (`index_vault.py`), and
-both configurable/disableable (see "Configuration reference").
-
-`log_event`/`start_session`/`update_session`/`close_session` are append-only
-and hard-validate the body on every write: `## Goal`, `## What happened`,
-`## Decisions made (raw)`, `## Open questions left`, and
-`## Artifacts / links` must all be present (`close_session` additionally
-requires `## Outcome`), or the write is rejected naming what's missing.
-They write into the `episodic` folder, never into a project's durable
-folder directly.
-
-`get_episodic_context` reads that trail back for a project over a time
-window, and `get_project_context(..., include_episodic=True)` folds it into
-a normal project read. `save_decision`'s optional `source_episodic` +
-`agents` record which session a durable decision came from, and
-`save_open_question` promotes a still-open unknown into the per-project
-`open_questions` store.
-
-`distill_session` closes the loop: it bundles a finished session with the
-project's current durable context and the proposal schema, a curator
-(see `docs/memory-curator.md`) turns that into a proposal of new
-decisions / open questions / discards, and `apply_distillation` writes the
-approved proposal back — each note stamped with `source_episodic` + the
-session's `agents`, and the session marked `promoted: true`. Nothing is
-promoted silently: `apply_distillation` needs `ENABLE_DISTILL_APPLY` and an
-explicit `confirm=True`, and edits to existing notes are returned as
-advice, not auto-applied.
-
-The full lifecycle: **an agent works → writes a structured episodic trail
-→ later distills the high-signal parts → durable project knowledge grows,
-with provenance back to the session it came from.** All plain Markdown,
-Obsidian-editable, local-first — no vector-only second store.
-
-For concurrent agents, `claim_note` / `release_note` put a `locked_by` /
-`locked_at` marker in a note's frontmatter, `flag_conflict` marks a note
-`status: conflict` with links to the competing notes, and
-`check_note_status` is the cheap pre-edit lookup. There's no distributed
-consensus — agents are told (via skill / system prompt) to claim before a
-major edit and to stop on a lock or conflict they don't own; `force=True`
-overrides a stale lock. All four work on any note by path.
-
-## Folder taxonomy
-
-Fresh clone, no `taxonomy.json` yet = a taxonomy-free server. Reads among
-the 18 role-gated tools raise a clear `TaxonomyNotConfigured` error instead
-of silently returning nothing; writes raise instead of silently creating a
-folder in your vault. Run `python3 onboard.py` to fix that — it:
-
-- Scans your vault's existing top-level folders and lets you assign each of
-  the 9 built-in roles (ideas, builder projects, professional decisions,
-  professional tech analysis, professional architecture, professional
-  projects, inbox, episodic, open questions) to one of them, a custom path
-  you type, or skip it. Offers three modes: map each role yourself (guided),
-  skip for now, or apply a working example taxonomy as a starting point —
-  see below.
-- Optionally scaffolds the 4 [PARA](https://fortelabs.com/blog/para/)
-  folders (`Projects/`, `Areas/`, `Resources/`, `Archive/`) if you want a
-  starting structure rather than mapping onto something that already
-  exists.
-- Lets you define **custom categories** beyond the 9 built-in roles — e.g.
-  your own "Meeting Notes" — each becoming a real `get_<key>`/
-  `create_<key>_note` tool pair, registered dynamically at server startup.
-  Optional per-category required sections (same mechanism `save_decision`
-  uses for its `**Decided:**`/`**What it means:**` check) and filename
-  prefix.
-- Writes everything to `taxonomy.json` (gitignored — personal, same
-  treatment as `.env`). Re-running edits it in place; `--reconfigure`
-  starts fresh.
-
-### Example taxonomy
-
-A real, working mapping — one option in `onboard.py`'s menu applies this
-directly as a starting point instead of mapping each role by hand:
-
-| Role | Folder |
-|---|---|
-| `builder_ideas` | `02-Builder/Ideas` |
-| `builder_projects` | `02-Builder/Projects` |
-| `professional_decisions` | `01-Professional/Solution-Architecture/Decisions` |
-| `professional_tech_analysis` | `01-Professional/Solution-Architecture/Gap-Analysis` |
-| `professional_architecture` | `01-Professional/Solution-Architecture/Architecture` |
-| `professional_projects` | `01-Professional/Solution-Architecture/Projects` |
-| `inbox` | `00-Inbox` |
-| `episodic` | `02-Builder/Episodic` |
-| `open_questions` | `02-Builder/Open-Questions` |
-
-This is one example shape, not a default — a fresh clone still ships with
-every role unconfigured until `onboard.py` runs. Picking this option
-creates any of these folders that don't already exist in your vault, then
-you can re-run the wizard (without `--reconfigure`) any time to adjust
-individual roles.
-
-### Per-project subfolders (optional)
-
-Separate from the 9 built-in roles: a Builder project (`builder_projects`
-role, `save_decision`/`update_feature` with `professional=False`) can opt
-into a fixed set of subfolders via `taxonomy.json`'s `project_subfolders`:
-
-```json
-"project_subfolders": {
-  "MyProject": ["architecture", "general", "archives"]
-}
-```
-
-Once a project has an entry, `save_decision`/`update_feature` **require** a
-`subfolder` argument for that project and reject anything not in the list —
-no guessing, no silent default. A project with no entry (the default for
-every project, including in a fresh clone) keeps the flat project-root
-behavior every project has always had; this is opt-in, not a breaking
-change. `onboard.py` doesn't configure this yet — edit `taxonomy.json`
-directly.
-
-Subfolder names are up to you; `architecture`/`legal`/`general` are just a
-convention (a legal-sensitive product wants `legal`, most don't). One name
-worth adopting everywhere: `archives`, for notes that are discarded/shelved/
-no-longer-applicable — an alternative to deleting them (there's still no
-delete tool) that keeps them fully readable by every tool, just out of the
-way. `move_note` (below) is how a note actually gets there.
-
-For Path B (Docker), run it inside the container so it writes to the same
-bind-mounted `taxonomy.json` the server reads:
-```bash
-docker compose exec -it vaultex python3 onboard.py   # -it: needs a real terminal for prompts
-```
-Restart afterward (`docker compose up -d --build`, or just `python3
-server.py` again for Path A) to pick up changes — same as any other `.env`
-edit.
-
-## Security model
-
-Found a vulnerability? See [SECURITY.md](SECURITY.md) for how to report it
-privately rather than filing a public issue.
-
-- **Path safety**: every tool resolves through `safe_path`/`iter_markdown` in
-  `core/vault.py`, which blocks `..` traversal outside the vault and enforces
-  `EXCLUDED_AREAS` — a new tool can't accidentally bypass either check.
-- **Auth**: without `OAUTH_ISSUER_URL` set, a single shared bearer token,
-  compared with `secrets.compare_digest` (timing-safe) — wrong or missing
-  token → `401` before any tool runs. With `OAUTH_ISSUER_URL` set, OAuth 2.1
-  access tokens are accepted too (see "Remote access" below); the bearer
-  token keeps working either way as a fallback for clients that can't do a
-  browser OAuth flow.
-- **Read-only mode**: `READ_ONLY=true` removes write tools from the tool list
-  entirely, not just from what they're allowed to do.
-- **Move gated separately from writes**: `move_note` needs `ENABLE_NOTE_MOVE=true`
-  on top of `READ_ONLY=false` — off by default even in read/write mode, since
-  relocate-and-possibly-overwrite is riskier than an additive write. Both of
-  its paths still go through the same `safe_path`/`EXCLUDED_AREAS` checks as
-  every other tool. There is still no delete tool.
-- **Distillation write-back gated separately**: `apply_distillation` needs
-  `ENABLE_DISTILL_APPLY=true` on top of `READ_ONLY=false`, and a per-call
-  `confirm=True`, since it promotes episodic content into the durable store.
-  `distill_session` (read-only bundling) is always available.
-- **Rate limiting**: every request is capped per source IP on a sliding
-  window (`RATE_LIMIT_MAX_REQUESTS` per `RATE_LIMIT_WINDOW_SECONDS`, default
-  120/60s) — applied ahead of auth, so both a bearer-token guessing attempt
-  and a leaked/over-shared token hammering the embedding-cost-bearing search
-  tools hit a hard ceiling. See `RateLimitMiddleware` in `core/middleware.py`.
-- **Failed-auth logging**: rejected bearer-token requests are logged
-  (source IP + method/path, never the token itself) so a guessing attempt
-  against a Path B deployment leaves a trace.
-
-### Self-reviewed against OWASP Top 10 (2025)
-
-A pass against the OWASP Top 10 (2025) checklist, verified against the
-actual source rather than assumed — items below are things anyone can
-re-check themselves, not just asserted:
-
-- **No SQL/NoSQL injection surface** — all SQLite access (`core/oauth/store.py`,
-  `core/embeddings.py`) uses parameterized `?` placeholders, no string-built
-  queries.
-- **No command injection** — no `shell=True`, no `eval`/`exec` anywhere in the
-  codebase; `install.py`'s `subprocess` calls use list-form arguments against
-  fixed commands, never attacker-controlled input.
-- **Vault-root escape is blocked** — `safe_path()`'s containment check
-  (`VAULT_PATH not in candidate.parents`) rejects any resolved path landing
-  outside the vault, regardless of how it was constructed.
-- **No secrets in source or git history** — `.env`, `taxonomy.json`, and the
-  local `*.db` stores are gitignored and confirmed untracked
-  (`git ls-files | grep -E '\.env$|\.db$|taxonomy\.json$'` returns nothing).
-- **No raw stack traces or internal errors returned to clients** — tool
-  errors surface through the MCP protocol's own error path, never an HTTP
-  response body.
-- **Baseline security headers set globally** —
-  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
-  `Referrer-Policy: strict-origin-when-cross-origin`, and a restrictive
-  `Permissions-Policy`, applied to every response via
-  `SecurityHeadersMiddleware`.
-- **No permissive CORS** — no CORS middleware is configured at all, which is
-  the safe default (browsers block cross-origin requests with none
-  configured); nothing here uses a wildcard origin with credentials.
-- **OAuth hardening** — timing-safe comparisons throughout
-  (`secrets.compare_digest`), PKCE and `state` handled by the MCP SDK's
-  authorization layer, per-login-attempt and per-IP lockout on `/login`
-  (`core/oauth/login.py`), and refresh-token rotation on every use.
-- **No unrestricted resource consumption** — every request is rate-limited
-  per source IP (`RateLimitMiddleware`, see "Security model" above), closing
-  off unthrottled abuse of the embedding-cost-bearing search tools.
-- **No known-vulnerable dependencies** — `pip-audit` runs against
-  `requirements.txt` on every push/PR; zero known vulnerabilities as of the
-  last run.
-
-This is a self-review, not an independent third-party audit — treat it as a
-starting point for your own risk assessment, not a certification.
-
-### CI and pre-commit gates
-
-- **`pip-audit`** runs on every push/PR (`.github/workflows/security.yml`),
-  checking `requirements.txt` against known-vulnerability databases.
-- **`gitleaks`** scans for committed secrets both in CI (same workflow) and
-  locally: run `pip install pre-commit && pre-commit install` once to catch a
-  secret before it's committed at all, not just after it's pushed.
-- **`ruff`** lints on every push/PR (`.github/workflows/lint.yml`) and
-  locally via the same pre-commit hook — pyflakes + pycodestyle-errors only
-  (`ruff.toml`), so it catches real mistakes (unused imports, undefined
-  names) rather than bikeshedding style.
-- **`pytest`** runs on every push/PR (`.github/workflows/ci.yml`) — see
-  `tests/` for what's covered so far: vault path-safety
-  (`safe_path`/`check_area_allowed` — traversal and excluded-area blocking)
-  and the frontmatter split/join round-trip. Run locally with `pytest` from
-  the repo root (needs `requirements.txt` installed, or at minimum
-  `pyyaml` + `python-dotenv` for just these two modules).
-
-Deployment is meant to progress in phases: local-only, then tunneled
-read-only, then tunneled read/write once trusted, then agent automation on
-top. See the docstring in `server.py` for the exact phase breakdown.
-
-## Remote access (optional)
-
-`server.py` is its own single-user OAuth 2.1 authorization server
-(`core/oauth/`) — no third-party gateway required. `docker-compose.yml`
-bundles it with a Tailscale sidecar so remote (web/mobile) access needs
-nothing installed on the host beyond Docker and your own Tailscale account.
-See "Quick start" → Path B above for the actual setup commands.
-
-```
-Claude (web/iPhone) --OAuth 2.1--> Tailscale Funnel (sidecar) --> server.py (core/oauth/)
-```
-
-Since this is single-user, the OAuth `/authorize` step is a shared-password
-gate (`AUTHORIZE_PASSWORD`, see `core/oauth/login.py`) rather than a real
-login system — the same shape the previous Cloudflare Worker used, just
-in-process now. It's your own tailnet and your own `TS_AUTHKEY` throughout;
-nothing routes through anyone else's infrastructure. A technical user can
-strip the `tailscale` sidecar out of `docker-compose.yml` entirely and front
-the `vaultex` service with their own reverse proxy/VPN instead.
-
-`vault_embeddings.db` and `oauth_store.db` are bind-mounted straight from
-the repo root into the container (not a Docker-managed volume), so they're
-the exact same files `python3 server.py` uses when run locally per Path A —
-reindex from either place and both see it. Don't run Path A and the Docker
-stack at the same time against the same vault: SQLite expects one writer.
-
-### Troubleshooting
-
-- **`docker compose up` fails to recreate the `vaultex` container** with
-  something like `container ... is zombie and can not be killed`: plain
-  `python3 server.py` as PID 1 inside a container can't reap zombie
-  processes on its own. `docker-compose.yml` already sets `init: true` on
-  the `vaultex` service to fix this; if you rewrite the compose file from
-  scratch, keep that line.
-- **A few seconds of `curl: (35) SSL_ERROR_SYSCALL` right after
-  `docker compose up`**: expected — Tailscale's Funnel edge needs ~15-20s to
-  reconnect after the sidecar restarts. `tailscale funnel status` inside the
-  container will already say "on"; the public URL just needs a moment to
-  catch up. No action needed, just retry.
+- **[Configuration reference](docs/configuration.md)** — every `.env`
+  variable, what "Running" serves, and the optional semantic-search index
+- **[Available tools](docs/tools.md)** — the full 29-tool table and the
+  episodic-memory / distillation / multi-agent coordination lifecycle
+- **[Folder taxonomy](docs/taxonomy.md)** — `onboard.py`, the 9 built-in
+  roles, custom categories, per-project subfolders, the example mapping
+- **[Architecture](docs/architecture.md)** — how the repo is laid out
+  (`server.py`, `core/`, `tools/`)
+- **[Security model](docs/security-model.md)** — path safety, auth, the
+  OWASP Top 10 (2025) self-review, CI and pre-commit gates
+- **[Remote access](docs/remote-access.md)** — the self-hosted OAuth 2.1
+  server, the Tailscale sidecar, and Path B troubleshooting
+- **[Benchmarks](docs/benchmarks.md)** — the manual-context-handover
+  measurement and how to reproduce it
+- **[Memory curator](docs/memory-curator.md)** — the curator role that turns
+  a distilled session into durable notes
 
 ## Upgrading and uninstalling
 
