@@ -34,9 +34,15 @@
 | `flag_conflict` | write | Mark a note `status: conflict`, record `conflicts_with`, and append a `## Conflict (<date>)` body section |
 | `check_note_status` | read | A note's `locked_by` / `locked_at` / `status` / `conflicts_with` without reading the whole note — the pre-edit check |
 
-18 of the 29 tools (everything except `read_note`, `search`, `grep`,
-`save_brainstorm`, `get_tags`, `update_frontmatter`, `move_note`,
-`claim_note`, `release_note`, `flag_conflict`, and `check_note_status`)
+The counts above are Professional mode (31 tools). In **Basic mode** only
+`search`, `grep`, `read_note`, and `write_note` are registered — the rest are
+never imported, so they don't appear in `tools/list` at all. See
+[Modes](../README.md#modes).
+
+18 of the 31 tools (everything except `read_note`, `search`, `grep`,
+`write_note`, `list_workspaces`, `save_brainstorm`, `get_tags`,
+`update_frontmatter`, `move_note`, `claim_note`, `release_note`,
+`flag_conflict`, and `check_note_status`)
 resolve through
 `taxonomy.json` — see [Folder taxonomy](taxonomy.md). Any custom categories
 from `taxonomy.json` add their own `get_<key>`/`create_<key>_note` tools to

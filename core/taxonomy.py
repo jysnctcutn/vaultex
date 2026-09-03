@@ -42,14 +42,17 @@ class CustomCategory:
     prefix: str = ""
 
 
-def _load() -> dict:
+def load_raw() -> dict:
+    """Re-read taxonomy.json from disk. Public because core/workspaces.py
+    re-reads per call for hot reload; everything else here reads it once at
+    import, since roles and custom categories drive tool registration."""
     if not TAXONOMY_PATH.exists():
         return {"roles": {}, "custom_categories": [], "project_subfolders": {}}
     with open(TAXONOMY_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 
-_data = _load()
+_data = load_raw()
 
 roles: dict[str, Path | None] = {
     key: (Path(value) if value else None) for key, value in {**dict.fromkeys(ROLE_KEYS), **_data.get("roles", {})}.items()

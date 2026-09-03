@@ -4,6 +4,7 @@ Not a read_file/write_file/list_directory server — every tool goes through
 these helpers so a new tool can't forget the excluded-areas/traversal checks.
 """
 
+import re
 from collections import Counter
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from .embeddings import (
     get_model,
     index_note as _index_note,
 )
+from .policy import POLICY_FILENAME, POLICY_PATH, load as write_policy
 from .taxonomy import roles
 
 # Cosine-distance cutoff for find_related(), shared by _auto_link() and
@@ -72,10 +74,9 @@ def require_role(path: Path | None, role_key: str) -> Path:
 
 def resolve_project_subfolder(project_name: str, subfolder: str | None, allowed: list[str] | None) -> str:
     """`allowed` is taxonomy.py's project_subfolders.get(project_name).
-    Unconfigured (falsy) -- subfolder must be omitted, keeps the flat
-    project-root behavior every project has always had. Configured --
-    subfolder is required, exact match against `allowed` (no case-folding:
-    a mismatch should surface as a clear error, not a silent miss)."""
+    Unconfigured: subfolder must be omitted, keeping the flat project-root
+    behavior. Configured: required, exact match -- no case-folding, so a
+    mismatch is a clear error rather than a silent miss."""
     if not allowed:
         if subfolder is not None:
             raise ValueError(f"'{project_name}' has no configured subfolders in taxonomy.json; omit `subfolder`.")
@@ -118,13 +119,39 @@ def read_capped(paths, limit: int | None = None) -> list[dict]:
     return [{"path": str(p.relative_to(VAULT_PATH)), "content": read(p)} for p in paths]
 
 
-def write(path: Path, content: str, overwrite: bool) -> str:
+def _refuse_protected_path(path: Path) -> None:
+    """No tool may write or move write_policy.md. Not enforced in safe_path()
+    because reads go through there too, and read_note must still show it."""
+    if path == POLICY_PATH:
+        raise PermissionError(
+            f"{POLICY_FILENAME} controls write behavior and can't be modified by a tool. "
+            "Edit it directly in your vault."
+        )
+
+
+def _ensure_parent(path: Path) -> None:
+    """Silent folder creation is the surprise this toggle exists for: a
+    typo'd area= otherwise grows a new tree in someone else's vault."""
+    if path.parent.exists():
+        return
+    if not write_policy().create_missing_folders:
+        raise FileNotFoundError(
+            f"{path.parent.relative_to(VAULT_PATH)} doesn't exist, and create_missing_folders "
+            f"is off in {POLICY_FILENAME}. Create the folder first, or turn that toggle back on."
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def write(path: Path, content: str, overwrite: bool, auto_link: bool = True) -> str:
+    """auto_link=False is the zero-inference path (write_note); it skips the
+    footer regardless of policy."""
+    _refuse_protected_path(path)
     is_new = not path.exists()
     if not is_new and not overwrite:
         raise FileExistsError(f"{path.relative_to(VAULT_PATH)} already exists; pass overwrite=True")
-    if is_new:
+    if is_new and auto_link:
         content = _auto_link(path, content)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_parent(path)
     path.write_text(content, encoding="utf-8")
     _reindex(path)
     return str(path.relative_to(VAULT_PATH))
@@ -134,23 +161,30 @@ def move(old_path: Path, new_path: Path, overwrite: bool) -> str:
     """Move/rename a note. Both paths must already be resolved through
     safe_path by the caller -- this function only handles the filesystem
     move and reindex, not path-safety validation."""
+    _refuse_protected_path(old_path)
+    _refuse_protected_path(new_path)
     if not old_path.is_file():
         raise FileNotFoundError(f"No such note: {old_path.relative_to(VAULT_PATH)}")
     if new_path.exists() and not overwrite:
         raise FileExistsError(f"{new_path.relative_to(VAULT_PATH)} already exists; pass overwrite=True")
-    new_path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_parent(new_path)
     old_path.rename(new_path)
     _reindex_move(old_path, new_path)
     return str(new_path.relative_to(VAULT_PATH))
 
 
 def _auto_link(path: Path, content: str) -> str:
-    """Append a '## Related notes' section linking close semantic matches.
-    Only fires for brand-new notes (write()'s is_new gate), so it can't
-    duplicate on edits or break update_frontmatter's "never touches the
-    body" promise. No-op without AUTO_LINK_ON_SAVE or an index; lookup
-    failures are logged and swallowed, never block the save."""
-    if not AUTO_LINK_ON_SAVE or not _SEMANTIC_DEPS_AVAILABLE or not EMBEDDINGS_DB_PATH.exists():
+    """Append a '## Related notes' footer of close semantic matches.
+
+    New notes only (write()'s is_new gate), so it can't duplicate on edits
+    or break update_frontmatter's "never touches the body" promise. Lookup
+    failures are logged and swallowed -- never block the save.
+
+    AUTO_LINK_ON_SAVE is the deprecated env predecessor, ANDed so an install
+    already setting it false keeps that behavior."""
+    if not AUTO_LINK_ON_SAVE or not write_policy().auto_link_on_save:
+        return content
+    if not _SEMANTIC_DEPS_AVAILABLE or not EMBEDDINGS_DB_PATH.exists():
         return content
     try:
         conn = _embeddings_connect(EMBEDDINGS_DB_PATH)
@@ -177,14 +211,16 @@ class PlacementAmbiguous(ValueError):
 
 
 def infer_area(title: str, content: str, default: Path) -> Path:
-    """Infer where a free-form note (save_brainstorm) belongs by
-    semantic-searching for title+content and checking what folder(s) the
-    closest matches live in.
+    """Infer where a free-form note (save_brainstorm) belongs, from the
+    folders its closest semantic matches live in.
 
-    Returns `default` unchanged if semantic search isn't opted in or no
-    match is close enough -- never fabricates a folder. Raises
-    PlacementAmbiguous if the closest matches disagree with no clear
-    leader, instead of guessing."""
+    Falls back to `default` rather than fabricating a folder: no index, no
+    close match, or placement_inference off. Raises PlacementAmbiguous when
+    the matches disagree with no clear leader instead of guessing -- but
+    never when the toggle is off, since turning inference off has to remove
+    the failure mode too."""
+    if not write_policy().placement_inference:
+        return default
     if not _SEMANTIC_DEPS_AVAILABLE or not EMBEDDINGS_DB_PATH.exists():
         return default
     try:
@@ -250,15 +286,32 @@ def _reindex_move(old_path: Path, new_path: Path) -> None:
         logger.warning("Semantic reindex failed for move %s -> %s", old_path, new_path, exc_info=True)
 
 
-def slug(title: str, prefix: str = "") -> str:
-    """Normalize a note title for use as a filename stem. Strips a leading
-    `prefix` already in `title` (e.g. "Decision - ") first, so a title
-    copied from an existing note doesn't end up doubled once the call
-    site prepends its own copy."""
+_PATH_SEPARATORS = re.compile(r"[/\\]+")
+
+
+def sanitize_stem(title: str) -> str:
+    """A title is a filename stem, never a path -- without this,
+    create_app_idea("Auth/OAuth notes") would create a subfolder.
+
+    Pure and unconditional: landing a note in an unintended folder is a bug,
+    not a preference."""
+    cleaned = _PATH_SEPARATORS.sub("-", title.strip()).strip()
+    # "", "..", "---" carry no title and would make a junk or directory-like note.
+    return cleaned if cleaned.strip(" .-") else "untitled"
+
+
+def slug(title: str, prefix: str = "", *, strip_prefix: bool | None = None) -> str:
+    """Filename stem for a note title, minus a leading `prefix` the call site
+    is about to prepend itself (e.g. "Decision - ").
+
+    strip_prefix=None consults write_policy.md; pass a bool to keep the call
+    pure -- that read is the only I/O here."""
+    if strip_prefix is None:
+        strip_prefix = write_policy().strip_title_prefix
     stripped = title.strip()
-    if prefix and stripped.lower().startswith(prefix.lower()):
+    if prefix and strip_prefix and stripped.lower().startswith(prefix.lower()):
         stripped = stripped[len(prefix):].strip()
-    return stripped
+    return sanitize_stem(stripped)
 
 
 class VerificationError(ValueError):

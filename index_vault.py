@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 # script, if present, so it doesn't need exporting by hand — same as server.py.
 load_dotenv(Path(__file__).parent / ".env")
 
-from core.embeddings import MODEL_NAME, connect, get_model, incremental_sweep, index_note  # noqa: E402
+from core.embeddings import MODEL_NAME, connect, get_model, incremental_sweep, index_note, is_indexable  # noqa: E402
 
 
 def _print_progress(rel: str, chunks: int | None) -> None:
@@ -73,6 +73,8 @@ def main() -> None:
         model = get_model()
         indexed_notes = indexed_chunks = 0
         for note_path in sorted(vault_path.rglob("*.md")):
+            if not is_indexable(vault_path, note_path):
+                continue
             rel = str(note_path.relative_to(vault_path))
             n = index_note(conn, model, vault_path, note_path)
             indexed_notes += 1  # noqa: SIM113 — enumerate() doesn't fit: indexed_chunks below is a running sum of a different quantity, not the loop index

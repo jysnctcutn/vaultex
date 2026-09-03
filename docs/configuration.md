@@ -14,12 +14,13 @@ one-offs):
 | `MCP_HOST` | `0.0.0.0` | Bind address |
 | `MCP_PORT` | `8000` | Bind port |
 | `EXCLUDED_AREAS` | *(none)* | Comma-separated top-level folders this instance refuses to touch at all, e.g. `01-Professional` |
+| `VAULTEX_MODE` | *(derived)* | `basic` or `professional`. Unset = derived from `taxonomy.json` (configured → professional, else basic). Set by `onboard.py`. See [Modes](../README.md#modes) |
 | `READ_ONLY` | `false` | `true` = write tools aren't even registered (not just blocked at call time) |
 | `ENABLE_NOTE_MOVE` | `false` | `true` = registers `move_note`. Gated separately from, on top of, `READ_ONLY` — off by default even in read/write mode |
 | `ENABLE_DISTILL_APPLY` | `false` | `true` = registers `apply_distillation` (distillation's durable write-back). Same gating pattern as `ENABLE_NOTE_MOVE`; `distill_session` stays available regardless |
 | `LOG_LEVEL` | `info` | Set to `debug` for verbose output (e.g. which files search skips and why) |
 | `VAULT_EMBEDDINGS_DB` | `./vault_embeddings.db` | Override the semantic-search index location |
-| `AUTO_LINK_ON_SAVE` | `true` | `false` disables the automatic "## Related notes" section on brand-new notes (no-op either way until a semantic index exists) |
+| `AUTO_LINK_ON_SAVE` | `true` | **Deprecated** — superseded by `auto_link_on_save` in `write_policy.md`, which applies without a restart. ANDed with it, so an install already setting this `false` keeps that behavior; otherwise the policy file decides. See [Opinionated writes](../README.md#opinionated-writes) |
 | `SEARCH_LOG` | `false` | `true` = log every `search` call (query, params, fused top results) to a `search_events` table in `vault_embeddings.db`. Best-effort; raw material for a future Learning-to-Rank ranker, nothing reads it yet |
 | `RATE_LIMIT_MAX_REQUESTS` | `120` | Requests allowed per source IP per `RATE_LIMIT_WINDOW_SECONDS` |
 | `RATE_LIMIT_WINDOW_SECONDS` | `60` | Sliding window size, in seconds, for the request-rate cap |

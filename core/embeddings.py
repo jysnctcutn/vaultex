@@ -24,6 +24,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Here rather than core/policy.py because the indexer must skip this file and
+# this module stays config-free (see docstring). policy.py re-exports it.
+POLICY_FILENAME = "write_policy.md"
+
 MODEL_NAME = "BAAI/bge-small-en-v1.5"
 EMBEDDING_DIM = 384
 MAX_CHUNK_WORDS = 500
@@ -203,7 +207,16 @@ def delete_path(conn: sqlite3.Connection, path: str) -> None:
     conn.execute("DELETE FROM files WHERE path = ?", (path,))
 
 
+def is_indexable(vault_path: Path, note_path: Path) -> bool:
+    """Keep write_policy.md out of the index -- it's a control surface, not
+    content. Matched against the passed vault_path, since the CLI can target
+    a different vault than the server's."""
+    return not (note_path.name == POLICY_FILENAME and note_path.parent == vault_path)
+
+
 def index_note(conn: sqlite3.Connection, model: "SentenceTransformer", vault_path: Path, note_path: Path) -> int:
+    if not is_indexable(vault_path, note_path):
+        return 0
     rel = str(note_path.relative_to(vault_path))
     try:
         text = note_path.read_text(encoding="utf-8")
@@ -264,6 +277,8 @@ def incremental_sweep(vault_path: Path, db_path: Path, on_note=None) -> dict:
         indexed = 0
         indexed_chunks = 0
         for note_path in sorted(vault_path.rglob("*.md")):
+            if not is_indexable(vault_path, note_path):
+                continue  # not in seen_paths, so an already-indexed copy is purged as stale
             rel = str(note_path.relative_to(vault_path))
             seen_paths.add(rel)
             if stored_mtimes.get(rel) == note_path.stat().st_mtime:

@@ -57,9 +57,17 @@ def test_get_feature_context_includes_sibling_architecture_and_decisions():
     assert result["Decisions.md"] == "decisions content"
 
 
-def test_update_feature_rejects_subfolder_when_professional():
-    with pytest.raises(ValueError, match="only applies to Builder projects"):
-        update_feature("PCTestProf", "Widget", "content", professional=True, subfolder="architecture")
+def test_update_feature_rejects_subfolder_for_a_project_without_them():
+    """Replaces the old "subfolder only applies to Builder projects" rule.
+    Workspaces removed the privileged Builder context, so subfolders are now
+    keyed purely by project name and apply the same way in every workspace."""
+    with pytest.raises(ValueError, match="no configured subfolders"):
+        update_feature("PCTestNoSubfolders", "Widget", "content", subfolder="architecture")
+
+
+def test_update_feature_rejects_an_unknown_workspace():
+    with pytest.raises(ValueError, match="No workspace named"):
+        update_feature("PCTestWs", "Widget", "content", workspace="NoSuchWorkspace")
 
 
 def test_get_project_context_default_excludes_episodic(episodic_root):

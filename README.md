@@ -36,17 +36,18 @@ MCP-compatible client reaches only the context you choose to share.
 
 ![Vaultex demo](./vaultex.gif)
 
-**Contents:** [Features](#features) · [Easy install](#easy-install) ·
-[Quick start](#quick-start) ·
+**Contents:** [Features](#features) · [Modes](#modes) ·
+[Easy install](#easy-install) · [Quick start](#quick-start) ·
 [Connecting AI clients](#connecting-ai-clients-claude-chatgpt-grok) ·
+[Opinionated writes](#opinionated-writes) ·
 [Where this fits](#where-this-fits) ·
-[Documentation](#documentation) ·
+[Documentation](#related-documentation) ·
 [Upgrading and uninstalling](#upgrading-and-uninstalling) ·
 [Contributing](#contributing)
 
-Deeper reference — tools, configuration, taxonomy, security model, remote
-access — lives in [`docs/`](docs/), linked from
-[Documentation](#documentation) below.
+Deeper reference — modes, tools, configuration, taxonomy, security model,
+remote access — lives in [`docs/`](docs/), linked from
+[Documentation](#related-documentation) below.
 
 ## Features
 
@@ -63,12 +64,23 @@ access — lives in [`docs/`](docs/), linked from
 - **Path-safety by construction** — every tool routes through a shared
   boundary that blocks `..` traversal and can hide entire top-level folders
   (e.g. client/employer work) per server instance.
-- **29 built-in tools** spanning search, project and architecture context,
-  episodic memory, distillation, multi-agent coordination, tagging, and
-  brainstorm capture — see [docs/tools.md](docs/tools.md).
+- **Two modes** — **Basic** points at any Markdown folder and gives you four
+  tools with no taxonomy at all; **Professional** adds the full structured
+  toolset. See [Modes](#modes) and [docs/modes.md](docs/modes.md).
+- **31 built-in tools** in Professional mode, spanning search, project and
+  architecture context, episodic memory, distillation, multi-agent
+  coordination, tagging, and brainstorm capture — see
+  [docs/tools.md](docs/tools.md).
 - **Folder taxonomy** — map your vault's own folders (or scaffold PARA) once
   via `onboard.py`; define custom categories that become their own
   `get`/`create` tools automatically at startup.
+- **Workspaces** — name your own project contexts ("Personal", "Work",
+  "Sandbox") and pass `workspace=` to the project tools. Add one to
+  `taxonomy.json` and it works on the next call, no restart.
+- **Tunable write behavior** — a `write_policy.md` note at your vault root
+  turns off auto-linking, placement inference, prefix stripping, or silent
+  folder creation. Edit and save; the next write picks it up. See
+  [docs/write-policy.md](docs/write-policy.md).
 - **Local semantic search** — optional embeddings index (`index_vault.py`);
   keyword + embeddings merged with Reciprocal Rank Fusion, runs entirely on
   your machine, no cloud calls.
@@ -81,6 +93,29 @@ access — lives in [`docs/`](docs/), linked from
   list entirely, not just blocks them at call time.
 - **No cloud, no subscriptions** — your vault stays on your machine or your
   own tailnet.
+
+## Modes
+
+Vaultex runs in one of two modes. `python3 onboard.py` asks which on its
+first prompt and writes the answer to `.env` as `VAULTEX_MODE`.
+
+| | **Basic** | **Professional** |
+|---|---|---|
+| Tools | 4 — `search`, `grep`, `read_note`, `write_note` | 31 — the above plus decisions, brainstorms, episodic memory, distillation, coordination, workspaces |
+| Taxonomy | none | `taxonomy.json` |
+| Folder layout | yours, untouched | PARA for a fresh vault, or mapped onto folders you already have |
+| Writes | explicit path only | routed, named, section-checked, cross-linked |
+
+**Basic** is the "point it at any Markdown folder" path — nothing to
+configure, nothing to learn. **Professional** is the structured surface.
+
+The two are mutually exclusive, not stacked: in Basic mode the structured
+tools are *not registered at all*, so a taxonomy-free vault is a supported
+configuration rather than an error state. With `VAULTEX_MODE` unset the mode
+is derived from `taxonomy.json`, so existing installs are unaffected.
+
+Full detail — switching, the derivation rule, **workspaces**, and the
+deprecated `professional` flag — in [docs/modes.md](docs/modes.md).
 
 ## Easy install
 
@@ -175,25 +210,32 @@ Fill in `VAULTEX_PATH` (path to your vault folder) and `MCP_AUTH_TOKEN`
 Leave `OAUTH_ISSUER_URL`, `AUTHORIZE_PASSWORD`, and `TS_AUTHKEY` blank — those
 only get filled in during Path B, later.
 
-### 3. (Optional) Set up your folder taxonomy
-
-18 of the 29 tools — the ones that read/write ideas, projects, decisions,
-episodic sessions/events, open questions, etc. rather than doing free-form
-search — need to know which folders in *your* vault to use. Skip this stage
-entirely and the server still runs fine: those 18 tools just report "not
-configured" until you come back to this. `search`, `grep`,
-`read_note`, and `save_brainstorm` never need this — they work on any
-vault immediately.
+### 3. Pick a mode (and, in Professional, a folder layout)
 
 ```bash
 python3 onboard.py
 ```
 
-Walks your vault's existing folders, lets you map each of the 9 built-in
-roles (or skip it), optionally scaffolds PARA folders, and lets you define
-your own categories beyond the built-in 9. Full detail in
-[docs/taxonomy.md](docs/taxonomy.md). Safe to run later instead — nothing
-here blocks stage 4.
+Its first question is [Basic or Professional](#modes), and it explains both
+before you answer. The choice is written to `.env` as `VAULTEX_MODE`.
+
+**Basic** finishes here — four tools, no taxonomy, your folders left alone.
+
+**Professional** continues to a layout:
+
+1. **PARA** — scaffolds `Projects/ Areas/ Resources/ Archive/` and maps the
+   built-in roles into them (recommended for a fresh vault)
+2. **Guided** — map each role onto folders you already have
+3. **Author's layout** — the maintainer's own structure, as a starting point
+4. **Skip** — leave roles unconfigured for now
+
+Then it asks what to call your workspaces (press enter for a single one),
+and seeds a [`write_policy.md`](#opinionated-writes) into your vault.
+
+Skipping this stage entirely still leaves a working server: with no
+taxonomy, the mode derives to Basic. Full detail in
+[docs/taxonomy.md](docs/taxonomy.md). Safe to run later — nothing here
+blocks stage 4.
 
 ### 4. Pick a path and run it
 
@@ -288,6 +330,28 @@ Menu names shift as these products update — if a step doesn't match what
 you see, look for "Connectors," "Custom connector," or "MCP" in that
 client's settings.
 
+## Opinionated writes
+
+In Professional mode the structured write tools shape notes for you. Four
+behaviors are switchable from a single note at your vault root,
+`write_policy.md`:
+
+```yaml
+auto_link_on_save: true      # append a "## Related notes" footer to new notes
+placement_inference: true    # let save_brainstorm pick the folder
+strip_title_prefix: true     # avoid "Decision - Decision - …"
+create_missing_folders: true # create a write's target folder if absent
+```
+
+Edit and save — the next write picks it up, no restart. With no file, every
+toggle defaults to `true`, which is the pre-existing behavior. Want none of
+it? Use `write_note`, or Basic mode.
+
+The toggles, what stays deliberately non-configurable, and the **failure
+modes** (`PlacementAmbiguous`, `TaxonomyNotConfigured`, `VerificationError`,
+`WorkspaceNotConfigured`) are documented in
+[docs/write-policy.md](docs/write-policy.md).
+
 ## Where this fits
 
 There are two ways in:
@@ -322,12 +386,17 @@ itself (`core/oauth/`). No third-party gateway sits in front of it.
 
 Deeper reference lives in [`docs/`](docs/):
 
+- **[Modes](docs/modes.md)** — Basic vs Professional, how the mode is chosen
+  and switched, workspaces, and the deprecated `professional` flag
+- **[Write policy](docs/write-policy.md)** — the four `write_policy.md`
+  toggles, what stays non-configurable, and every failure mode a tool can
+  return
 - **[Configuration reference](docs/configuration.md)** — every `.env`
   variable, what "Running" serves, and the optional semantic-search index
-- **[Available tools](docs/tools.md)** — the full 29-tool table and the
+- **[Available tools](docs/tools.md)** — the full 31-tool table and the
   episodic-memory / distillation / multi-agent coordination lifecycle
 - **[Folder taxonomy](docs/taxonomy.md)** — `onboard.py`, the 9 built-in
-  roles, custom categories, per-project subfolders, the example mapping
+  roles, workspaces, custom categories, per-project subfolders
 - **[Architecture](docs/architecture.md)** — how the repo is laid out
   (`server.py`, `core/`, `tools/`)
 - **[Security model](docs/security-model.md)** — path safety, auth, the
