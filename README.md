@@ -5,7 +5,7 @@
 ╚██╗ ██╔╝██╔══██║██║   ██║██║     ██║   ██╔══╝   ██╔██╗ 
  ╚████╔╝ ██║  ██║╚██████╔╝███████╗██║   ███████╗██╔╝ ██╗
   ╚═══╝  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝   ╚══════╝╚═╝  ╚═╝ MCP
-The local-first context layer for AI agents.
+Local-first context layer for AI agents.
 No Cloud. No Subscriptions. One context. Every AI. 
 MIT licensed. Free for individuals.
 ```
