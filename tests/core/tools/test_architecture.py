@@ -19,9 +19,20 @@ def professional_roots(monkeypatch):
     tech_analysis = Path("01-Professional/TechAnalysis")
     architecture = Path("01-Professional/Architecture")
     monkeypatch.setattr(arch_mod, "PROFESSIONAL_DECISIONS", decisions)
-    monkeypatch.setattr(arch_mod, "PROFESSIONAL_PROJECTS", projects)
     monkeypatch.setattr(arch_mod, "PROFESSIONAL_TECH_ANALYSIS", tech_analysis)
     monkeypatch.setattr(arch_mod, "PROFESSIONAL_ARCHITECTURE", architecture)
+
+    # Project roots now resolve through workspaces rather than the
+    # PROFESSIONAL_PROJECTS / BUILDER_PROJECTS role constants. Stubbing the
+    # resolver keeps the two contexts these tests rely on: professional=True
+    # lands in the fixture's own tree, professional=False in the Builder root
+    # the conftest taxonomy already configures.
+    def _resolve(workspace=None, professional=None):
+        if professional:
+            return "Professional", projects
+        return "Builder", Path("02-Builder/Projects")
+
+    monkeypatch.setattr(arch_mod, "resolve_workspace", _resolve)
     return {
         "decisions": decisions,
         "projects": projects,

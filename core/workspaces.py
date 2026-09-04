@@ -100,10 +100,11 @@ def resolve(workspace: str | None = None, professional: bool | None = None) -> t
         friendly, role_key = _LEGACY_WORKSPACES[professional]
         folder = roles.get(role_key)
         if folder is None:
-            raise WorkspaceNotConfigured(
-                f"professional={professional} maps to the '{role_key}' role, which isn't "
-                f"configured. Use workspace= instead: {', '.join(sorted(entries))}."
-            )
+            # A vault onboarded to PARA never configures these roles -- project
+            # roots come from workspaces. The alias has no specific meaning
+            # there, so honor the default rather than erroring about a role the
+            # user was never shown.
+            return resolve()
         named = next((n for n, p in entries.items() if p == folder), friendly)
         return named, folder
 

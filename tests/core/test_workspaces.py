@@ -56,9 +56,20 @@ def test_professional_false_resolves_through_the_role():
     assert str(folder) == "02-Builder/Projects"
 
 
-def test_professional_true_errors_when_that_role_is_unconfigured():
+def test_professional_true_falls_back_when_that_role_is_unconfigured():
+    """A PARA-onboarded vault never configures the legacy project roles --
+    project roots come from workspaces. The alias has no specific meaning
+    there, so it honors the default rather than erroring about a role the
+    user was never shown."""
+    _set_block({"entries": {"Personal": "Projects/Personal"}})
+    assert workspaces.resolve(professional=True) == ("Personal", Path("Projects/Personal"))
+
+
+def test_professional_alias_still_errors_when_no_workspaces_exist_at_all(monkeypatch):
     _set_block(None)
-    with pytest.raises(WorkspaceNotConfigured, match="professional_projects"):
+    monkeypatch.setattr(workspaces, "roles", {})
+    workspaces._cache = None
+    with pytest.raises(WorkspaceNotConfigured, match="No workspaces are configured"):
         workspaces.resolve(professional=True)
 
 
