@@ -1,11 +1,10 @@
 """Vault helpers, re-exported for the tool layer.
 
-The implementation lives in four focused modules -- paths (the access-control
-boundary), notes (read/write plus the semantic hooks), naming, and validation.
-This module keeps them behind one import so a tool author has a single door to
-walk through, which is what stops a new tool forgetting the safety checks.
+The implementation lives in paths, notes, naming, and validation. Keeping
+them behind one import gives a tool author a single door, which is what
+stops a new tool forgetting the safety checks.
 
-Import from here in tools; import the specific module when writing core code.
+Import from here in tools; import the module directly in core code.
 """
 
 from .config import VAULT_PATH

@@ -42,7 +42,9 @@ def _run_in_subprocess(code: str, *, taxonomy: dict | None, **extra_env) -> subp
         "ENABLE_NOTE_MOVE": "false",
         "ENABLE_DISTILL_APPLY": "false",
     }
-    env.pop("VAULTEX_MODE", None)  # never inherit the developer's own setting
+    # Empty, not popped: load_dotenv() would supply the developer's real
+    # value for anything absent. An explicit empty wins and reads as unset.
+    env["VAULTEX_MODE"] = ""
     env.update({k: str(v) for k, v in extra_env.items()})
     return subprocess.run(  # noqa: S603 — `code` is a module-level literal in this file, not input
         [sys.executable, "-c", code],

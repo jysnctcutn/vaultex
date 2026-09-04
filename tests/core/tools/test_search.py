@@ -3,11 +3,12 @@ import sqlite3
 
 import pytest
 
+import core.db.vectors as vectors_mod
 import core.tools.search as search_mod
-from core.embeddings import connect, index_note
+from core.db import connect, index_note
 from core.tools.search import _semantic_search, grep, read_note, search
 from core.vault import VAULT_PATH, safe_path, write
-from tests.core.test_embeddings import FakeModel
+from tests.core.test_db import FakeModel
 
 
 def _build_index(db_path, rel_paths):
@@ -114,7 +115,7 @@ def test_semantic_search_returns_ranked_results(monkeypatch, tmp_path):
 
     monkeypatch.setattr(search_mod, "_SEMANTIC_DEPS_AVAILABLE", True)
     monkeypatch.setattr(search_mod, "EMBEDDINGS_DB_PATH", db_path)
-    monkeypatch.setattr(search_mod, "get_model", lambda: model)
+    monkeypatch.setattr(vectors_mod, "get_model", lambda: model)
 
     results = _semantic_search("apples fruit basket", limit=5)
     assert len(results) == 1
@@ -136,7 +137,7 @@ def test_semantic_search_stops_once_limit_reached(monkeypatch, tmp_path):
 
     monkeypatch.setattr(search_mod, "_SEMANTIC_DEPS_AVAILABLE", True)
     monkeypatch.setattr(search_mod, "EMBEDDINGS_DB_PATH", db_path)
-    monkeypatch.setattr(search_mod, "get_model", lambda: model)
+    monkeypatch.setattr(vectors_mod, "get_model", lambda: model)
 
     results = _semantic_search("apples oranges fruit", limit=2)
     assert len(results) == 2
@@ -156,7 +157,7 @@ def test_semantic_search_filters_excluded_area(monkeypatch, tmp_path):
 
     monkeypatch.setattr(search_mod, "_SEMANTIC_DEPS_AVAILABLE", True)
     monkeypatch.setattr(search_mod, "EMBEDDINGS_DB_PATH", db_path)
-    monkeypatch.setattr(search_mod, "get_model", lambda: model)
+    monkeypatch.setattr(vectors_mod, "get_model", lambda: model)
 
     results = _semantic_search("classified secret content", limit=5)
     assert results == []
@@ -176,7 +177,7 @@ def test_search_combines_sources(monkeypatch, tmp_path):
 
     monkeypatch.setattr(search_mod, "_SEMANTIC_DEPS_AVAILABLE", True)
     monkeypatch.setattr(search_mod, "EMBEDDINGS_DB_PATH", tmp_path / "hybrid.db")
-    monkeypatch.setattr(search_mod, "get_model", lambda: model)
+    monkeypatch.setattr(vectors_mod, "get_model", lambda: model)
 
     # The keyword half is a substring match, so the query has to appear
     # verbatim in the note for it to contribute.
@@ -197,7 +198,7 @@ def test_search_ranks_two_source_hit_above_one_source_hit(monkeypatch, tmp_path)
 
     monkeypatch.setattr(search_mod, "_SEMANTIC_DEPS_AVAILABLE", True)
     monkeypatch.setattr(search_mod, "EMBEDDINGS_DB_PATH", tmp_path / "rank.db")
-    monkeypatch.setattr(search_mod, "get_model", lambda: model)
+    monkeypatch.setattr(vectors_mod, "get_model", lambda: model)
 
     results = search("alpha", limit=10)
     paths = [r["path"] for r in results]
@@ -242,7 +243,7 @@ def test_search_scoped_to_areas(monkeypatch, tmp_path):
 
     monkeypatch.setattr(search_mod, "_SEMANTIC_DEPS_AVAILABLE", True)
     monkeypatch.setattr(search_mod, "EMBEDDINGS_DB_PATH", tmp_path / "scoped.db")
-    monkeypatch.setattr(search_mod, "get_model", lambda: model)
+    monkeypatch.setattr(vectors_mod, "get_model", lambda: model)
 
     results = search("scoped-hybrid-xyz", areas=["03-Knowledge"], limit=10)
     assert results

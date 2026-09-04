@@ -9,8 +9,8 @@ from dataclasses import dataclass, fields
 
 from . import frontmatter
 from .config import VAULT_PATH, logger
-# Defined in embeddings.py, which must stay config-free; re-exported here.
-from .embeddings import POLICY_FILENAME
+# Defined in core/db/, which must stay config-free; re-exported here.
+from .db import POLICY_FILENAME
 
 __all__ = ["DEFAULTS", "POLICY_FILENAME", "POLICY_PATH", "WritePolicy", "load"]
 

@@ -14,7 +14,7 @@ import pytest
 
 import core.policy as policy_mod
 import core.notes as notes_mod
-from core.embeddings import is_indexable
+from core.db import is_indexable
 from core.vault import (
     PlacementAmbiguous,
     VAULT_PATH,
@@ -215,6 +215,28 @@ def test_write_refuses_the_policy_file():
     assert policy_mod.POLICY_PATH.read_text(encoding="utf-8") == original
 
 
+@pytest.mark.parametrize("alias", ["Write_Policy.md", "WRITE_POLICY.MD", "write_Policy.Md"])
+def test_write_refuses_case_variants_of_the_policy_file(alias):
+    """On a case-insensitive filesystem (APFS, NTFS) Path.resolve() keeps the
+    case you typed, so a plain == test would let the alias through to the
+    real file underneath."""
+    policy_mod.POLICY_PATH.write_text("---\nauto_link_on_save: true\n---\n", encoding="utf-8")
+    original = policy_mod.POLICY_PATH.read_text(encoding="utf-8")
+    with pytest.raises(PermissionError):
+        write(safe_path(alias), "rewritten by an agent", overwrite=True)
+    assert policy_mod.POLICY_PATH.read_text(encoding="utf-8") == original
+
+
+def test_move_refuses_a_case_variant_as_destination(scratch):
+    policy_mod.POLICY_PATH.write_text("---\n---\n", encoding="utf-8")
+    original = policy_mod.POLICY_PATH.read_text(encoding="utf-8")
+    decoy = scratch / "decoy.md"
+    decoy.write_text("payload", encoding="utf-8")
+    with pytest.raises(PermissionError):
+        move(decoy, safe_path("WRITE_POLICY.MD"), overwrite=True)
+    assert policy_mod.POLICY_PATH.read_text(encoding="utf-8") == original
+
+
 def test_move_refuses_the_policy_file_as_source():
     policy_mod.POLICY_PATH.write_text("---\n---\n", encoding="utf-8")
     with pytest.raises(PermissionError):
@@ -245,6 +267,11 @@ def test_policy_file_is_still_readable():
 def test_policy_file_is_not_indexable():
     assert is_indexable(VAULT_PATH, VAULT_PATH / "00-Inbox" / "note.md") is True
     assert is_indexable(VAULT_PATH, policy_mod.POLICY_PATH) is False
+
+
+@pytest.mark.parametrize("alias", ["Write_Policy.md", "WRITE_POLICY.MD"])
+def test_case_variants_are_not_indexable(alias):
+    assert is_indexable(VAULT_PATH, VAULT_PATH / alias) is False
 
 
 def test_same_filename_deeper_in_the_vault_is_still_indexed():

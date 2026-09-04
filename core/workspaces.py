@@ -1,17 +1,12 @@
 """Resolves workspace names to project-root folders.
 
-A workspace is a user-named project context -- "Personal", "Work",
-"Sandbox" -- mapped to any folder in taxonomy.json. It replaces the binary
-`professional: bool`, which leaked one particular vault's builder/work split
-into five tool signatures.
+A workspace is a user-named project context ("Personal", "Work") mapped to
+any folder in taxonomy.json, replacing the binary `professional: bool`.
+Entries point at arbitrary folders, so an existing vault attaches names to
+folders it already has instead of moving anything.
 
-Entries point at arbitrary folders rather than a fixed `Projects/<name>/`
-root, so an existing vault attaches names to folders it already has instead
-of moving anything.
-
-Re-read per call, so a workspace added to taxonomy.json works without a
-restart: unlike roles and custom categories, workspaces register no tools,
-so nothing needs rebuilding.
+Re-read per call: workspaces register no tools, so adding one needs no
+restart -- unlike roles and custom categories.
 """
 
 from pathlib import Path

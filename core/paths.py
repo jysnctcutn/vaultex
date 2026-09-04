@@ -1,8 +1,7 @@
-"""The vault's access-control boundary.
+"""The vault's access-control boundary: containment, excluded areas, and
+the paths no tool may write.
 
-Containment, excluded areas, and the paths no tool may write. Every tool
-resolves through here so a new one can't forget the checks -- this is the
-reason Vaultex isn't a read_file/write_file/list_directory server.
+Every tool resolves through here so a new one can't forget the checks.
 """
 
 from pathlib import Path
@@ -37,10 +36,22 @@ def safe_path(relative: Path | str) -> Path:
     return check_area_allowed(relative)
 
 
+def _is_policy_path(path: Path) -> bool:
+    """`path == POLICY_PATH` isn't enough: on a case-insensitive filesystem
+    resolve() keeps the case you typed, so "Write_Policy.md" compares unequal
+    yet opens the real file. samefile() also catches link aliases."""
+    if path.name.casefold() == POLICY_FILENAME.casefold() and path.parent == POLICY_PATH.parent:
+        return True
+    try:
+        return path.exists() and POLICY_PATH.exists() and path.samefile(POLICY_PATH)
+    except OSError:
+        return False
+
+
 def refuse_protected_path(path: Path) -> None:
     """No tool may write or move write_policy.md. Not enforced in safe_path()
     because reads go through there too, and read_note must still show it."""
-    if path == POLICY_PATH:
+    if _is_policy_path(path):
         raise PermissionError(
             f"{POLICY_FILENAME} controls write behavior and can't be modified by a tool. "
             "Edit it directly in your vault."

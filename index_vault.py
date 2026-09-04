@@ -27,7 +27,8 @@ from dotenv import load_dotenv
 # script, if present, so it doesn't need exporting by hand — same as server.py.
 load_dotenv(Path(__file__).parent / ".env")
 
-from core.embeddings import MODEL_NAME, connect, get_model, incremental_sweep, index_note, is_indexable  # noqa: E402
+from core.db import connect, incremental_sweep, index_note, is_indexable  # noqa: E402
+from core.embeddings import MODEL_NAME, get_model  # noqa: E402
 
 
 def _print_progress(rel: str, chunks: int | None) -> None:

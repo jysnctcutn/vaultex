@@ -8,14 +8,13 @@ from collections import Counter
 from pathlib import Path
 
 from .config import AUTO_LINK_ON_SAVE, EMBEDDINGS_DB_PATH, EXCLUDED_AREAS, VAULT_PATH, logger
-from .embeddings import (
-    _SEMANTIC_DEPS_AVAILABLE,
+from .db import (
     connect as _embeddings_connect,
     delete_path as _delete_path,
     find_related as _find_related,
-    get_model,
     index_note as _index_note,
 )
+from .embeddings import _SEMANTIC_DEPS_AVAILABLE, get_model
 from .paths import refuse_protected_path, top_level_area
 from .policy import POLICY_FILENAME, load as write_policy
 

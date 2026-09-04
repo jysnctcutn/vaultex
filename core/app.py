@@ -7,7 +7,8 @@ from starlette.applications import Starlette
 
 from . import tools  # noqa: F401  (import registers every @mcp.tool())
 from .config import EMBEDDINGS_DB_PATH, HOST, OAUTH_ISSUER_URL, REINDEX_INTERVAL_SECONDS, VAULT_PATH, logger
-from .embeddings import _SEMANTIC_DEPS_AVAILABLE, periodic_reindex
+from .db import periodic_reindex
+from .embeddings import _SEMANTIC_DEPS_AVAILABLE
 from .mcp_app import mcp
 from .middleware import BearerAuthMiddleware, RateLimitMiddleware, SecurityHeadersMiddleware
 from .mode import MODE
