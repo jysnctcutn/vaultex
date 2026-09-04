@@ -41,36 +41,15 @@ def _set_block(block: dict | None) -> None:
 
 def test_falls_back_to_roles_when_no_block():
     _set_block(None)
-    assert workspaces.available() == {"Builder": Path("02-Builder/Projects")}
+    assert workspaces.available() == {"Projects": Path("02-Builder/Projects")}
 
 
 def test_legacy_default_is_the_first_entry():
     _set_block(None)
-    assert workspaces.default_name() == "Builder"
+    assert workspaces.default_name() == "Projects"
 
 
-def test_professional_false_resolves_through_the_role():
-    _set_block(None)
-    name, folder = workspaces.resolve(professional=False)
-    assert name == "Builder"
-    assert str(folder) == "02-Builder/Projects"
 
-
-def test_professional_true_falls_back_when_that_role_is_unconfigured():
-    """A PARA-onboarded vault never configures the legacy project roles --
-    project roots come from workspaces. The alias has no specific meaning
-    there, so it honors the default rather than erroring about a role the
-    user was never shown."""
-    _set_block({"entries": {"Personal": "Projects/Personal"}})
-    assert workspaces.resolve(professional=True) == ("Personal", Path("Projects/Personal"))
-
-
-def test_professional_alias_still_errors_when_no_workspaces_exist_at_all(monkeypatch):
-    _set_block(None)
-    monkeypatch.setattr(workspaces, "roles", {})
-    workspaces._cache = None
-    with pytest.raises(WorkspaceNotConfigured, match="No workspaces are configured"):
-        workspaces.resolve(professional=True)
 
 
 # --- explicit workspaces block ----------------------------------------------
@@ -110,19 +89,6 @@ def test_unknown_name_lists_the_valid_ones():
     assert "Alpha, Beta" in str(exc.value)
 
 
-def test_workspace_and_professional_together_is_an_error():
-    """Rejected rather than given a precedence rule: guessing which the
-    caller meant would file notes somewhere they didn't ask for."""
-    with pytest.raises(ValueError, match="not both"):
-        workspaces.resolve(workspace="Alpha", professional=True)
-
-
-def test_professional_alias_uses_the_workspace_name_for_the_same_folder():
-    """A vault that renamed its contexts keeps working: the alias resolves
-    through the role's folder, then reports whatever that folder is called."""
-    _set_block({"entries": {"Side Projects": "02-Builder/Projects"}})
-    name, folder = workspaces.resolve(professional=False)
-    assert (name, str(folder)) == ("Side Projects", "02-Builder/Projects")
 
 
 # --- reload contract ---------------------------------------------------------
@@ -145,3 +111,30 @@ def test_unparseable_taxonomy_keeps_the_last_known_workspaces():
 
     TAXONOMY_JSON_PATH.write_text('{"workspaces": {"entries": {', encoding="utf-8")
     assert set(workspaces.available()) == {"Alpha"}
+
+
+# --- reserved legacy names ---------------------------------------------------
+
+@pytest.mark.parametrize("name", ["Builder", "builder", "Professional", "PROFESSIONAL", " professional "])
+def test_reserved_names_are_rejected(name):
+    with pytest.raises(workspaces.ReservedWorkspaceName, match="reserved legacy name"):
+        workspaces.check_name_allowed(name)
+
+
+@pytest.mark.parametrize("name", ["Personal", "Work", "Sandbox", "Builders", "Professionally"])
+def test_non_reserved_names_pass(name):
+    assert workspaces.check_name_allowed(name) == name
+
+
+def test_resolving_a_reserved_name_gives_the_clearer_error():
+    """A hand-edited taxonomy.json can't reintroduce the retired vocabulary."""
+    _set_block({"entries": {"Alpha": "Projects/Alpha"}})
+    with pytest.raises(workspaces.ReservedWorkspaceName):
+        workspaces.resolve(workspace="Professional")
+
+
+def test_grandfathered_explicit_block_still_resolves():
+    """Vaults that already named a workspace Builder keep working -- the
+    block applies to new additions, not existing config."""
+    _set_block({"default": "Builder", "entries": {"Builder": "02-Builder/Projects"}})
+    assert workspaces.resolve(workspace="Builder") == ("Builder", Path("02-Builder/Projects"))

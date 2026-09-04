@@ -7,7 +7,7 @@
 | `read_note` | read | Full verbatim content of one note by path |
 | `search` | read | Default search — keyword + local-embedding semantic, merged with Reciprocal Rank Fusion (k=60); each hit carries `score` and `sources`; soft-fails to keyword-only with no embeddings index |
 | `grep` | read | Literal substring search across titles and content — no ranking, no embeddings; for exact strings |
-| `get_app_ideas` | read | List app ideas under the configured `builder_ideas` folder |
+| `get_app_ideas` | read | List app ideas under the configured `ideas` folder |
 | `create_app_idea` | write | Create a new app idea note |
 | `get_project_context` | read | All notes for a Builder or Solution-Architecture project; `include_episodic=True` also appends recent episodic notes for it |
 | `get_feature_context` | read | One feature note plus sibling Architecture/Decisions notes |
@@ -15,7 +15,7 @@
 | `get_architecture_decisions` | read | List decision notes, professional or per-project |
 | `save_decision` | write | Save an architecture/product decision note; optional `source_episodic` + `agents` stamp provenance frontmatter for agent-originated decisions |
 | `get_tech_analysis_history` | read | List tech-analysis notes, optionally filtered by project |
-| `get_solution_architecture_context` | read | A project's notes + matching tech-analysis + architecture notes |
+| `get_architecture_context` | read | A project's notes + matching tech-analysis + architecture notes |
 | `save_brainstorm` | write | Save a brainstorm/conversation conclusion; auto-routed near related notes if a semantic index exists, else the configured `inbox` folder |
 | `get_tags` | read | A note's frontmatter `tags:` array plus inline `#tag` mentions in the body |
 | `update_frontmatter` | write | Create or update a note's YAML frontmatter (any property, not just tags); never touches the body |

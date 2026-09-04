@@ -1,9 +1,9 @@
 """Resolves workspace names to project-root folders.
 
 A workspace is a user-named project context ("Personal", "Work") mapped to
-any folder in taxonomy.json, replacing the binary `professional: bool`.
-Entries point at arbitrary folders, so an existing vault attaches names to
-folders it already has instead of moving anything.
+any folder in taxonomy.json. Entries point at arbitrary folders, so an
+existing vault attaches names to folders it already has instead of moving
+anything.
 
 Re-read per call: workspaces register no tools, so adding one needs no
 restart -- unlike roles and custom categories.
@@ -14,12 +14,30 @@ from pathlib import Path
 from .config import TAXONOMY_JSON_PATH, logger
 from .taxonomy import load_raw, roles
 
-# Fallback for a vault with no `workspaces` block: it already has up to two
-# workspaces, just spelled `professional: true/false`. Ordered so the first
-# entry is the default, matching today's `professional: bool = False`.
-_LEGACY_WORKSPACES = (("Builder", "builder_projects"), ("Professional", "professional_projects"))
+# Fallback for a vault with no `workspaces` block, derived from the two
+# legacy project roles. First entry is the default. These labels exist only
+# for un-migrated vaults and are meant to be renamed.
+_LEGACY_WORKSPACES = (("Projects", "builder_projects"), ("Work", "professional_projects"))
+
+# Retired vocabulary, blocked for new workspaces so it can't reappear under
+# user control. Vaults already using them in an explicit block keep working.
+RESERVED_NAMES = frozenset({"builder", "professional"})
 
 _cache: tuple[int, dict[str, Path], str | None] | None = None
+
+
+class ReservedWorkspaceName(ValueError):
+    """A new workspace tried to use retired vocabulary."""
+
+
+def check_name_allowed(name: str) -> str:
+    """Reject a reserved name. Called by onboarding and by resolution, so a
+    hand-edited taxonomy.json can't reintroduce what onboarding refuses."""
+    if name.strip().casefold() in RESERVED_NAMES:
+        raise ReservedWorkspaceName(
+            f"{name!r} is a reserved legacy name. Choose another, e.g. 'Personal' or 'Work'."
+        )
+    return name
 
 
 class WorkspaceNotConfigured(ValueError):
@@ -73,38 +91,19 @@ def default_name() -> str | None:
     return next(iter(entries), None)
 
 
-def resolve(workspace: str | None = None, professional: bool | None = None) -> tuple[str, Path]:
-    """(name, folder) for the workspace a call should write into.
-
-    `professional` is the deprecated alias. Passing both it and `workspace`
-    is an error rather than a precedence rule: guessing which the caller
-    meant would put notes somewhere they didn't ask for.
-    """
-    if workspace is not None and professional is not None:
-        raise ValueError("Pass either `workspace` or `professional`, not both.")
-
+def resolve(workspace: str | None = None) -> tuple[str, Path]:
+    """(name, folder) for the workspace a call should write into. Omit
+    `workspace` for the vault's default."""
     entries = available()
     if not entries:
         raise WorkspaceNotConfigured(
             "No workspaces are configured for this vault. Run `python3 onboard.py` to name one."
         )
 
-    if professional is not None:
-        # Resolves through the role, not a workspace name, so it keeps working
-        # for a vault that has since named its workspaces something else.
-        friendly, role_key = _LEGACY_WORKSPACES[professional]
-        folder = roles.get(role_key)
-        if folder is None:
-            # A vault onboarded to PARA never configures these roles -- project
-            # roots come from workspaces. The alias has no specific meaning
-            # there, so honor the default rather than erroring about a role the
-            # user was never shown.
-            return resolve()
-        named = next((n for n, p in entries.items() if p == folder), friendly)
-        return named, folder
-
     name = workspace if workspace is not None else default_name()
     if name not in entries:
+        # Reserved names get the clearer message; anything else lists what's valid.
+        check_name_allowed(name)
         raise WorkspaceNotConfigured(
             f"No workspace named {name!r}. Configured: {', '.join(sorted(entries))}."
         )

@@ -1,4 +1,4 @@
-"""Solution Architecture tools (professional area): decisions, gap analysis, full project context."""
+"""Decision, tech-analysis, and architecture-context tools."""
 
 from datetime import date
 
@@ -6,9 +6,9 @@ from ..frontmatter import join, split
 from ..mcp_app import mcp, write_tool
 from ..taxonomy import project_subfolders
 from ..vault import (
-    PROFESSIONAL_ARCHITECTURE,
-    PROFESSIONAL_DECISIONS,
-    PROFESSIONAL_TECH_ANALYSIS,
+    ARCHITECTURE,
+    DECISIONS,
+    TECH_ANALYSIS,
     check_area_allowed,
     iter_markdown,
     read_capped,
@@ -24,23 +24,23 @@ from ..workspaces import resolve as resolve_workspace
 
 
 @mcp.tool()
-def get_architecture_decisions(project_name: str | None = None, professional: bool = True,
+def get_architecture_decisions(project_name: str | None = None, workspace: str | None = None,
                                 limit: int = 10) -> list[dict]:
     """List decision notes, most-recently modified first, capped at `limit`.
 
-    With project_name, reads that project in the resolved workspace; without
-    one, the professional-decisions folder. `professional` is the deprecated
-    workspace selector — see list_workspaces."""
+    With project_name, reads that project — in `workspace`, or the default
+    one (see list_workspaces). Without it, the standalone decisions folder."""
     validate_limit(limit)
     if project_name:
-        _, base = resolve_workspace(professional=professional)
+        _, base = resolve_workspace(workspace)
         root_rel = base / project_name
+        # A project folder holds more than decisions, so filter by name.
+        keep = lambda p: "decision" in p.name.lower()  # noqa: E731
     else:
-        if not professional:
-            raise ValueError("project_name is required when professional=False")
-        root_rel = require_role(PROFESSIONAL_DECISIONS, "professional_decisions")
+        root_rel = require_role(DECISIONS, "decisions")
+        keep = lambda p: True  # noqa: E731 — the whole folder is decisions
     check_area_allowed(root_rel)
-    paths = [p for p in iter_markdown(root_rel) if professional or "decision" in p.name.lower()]
+    paths = [p for p in iter_markdown(root_rel) if keep(p)]
     return read_capped(paths, limit=limit)
 
 
@@ -64,18 +64,18 @@ def _apply_provenance(content: str, source_episodic: str | None, agents: list[st
 
 
 @write_tool
-def save_decision(title: str, content: str, professional: bool = False,
-                   project_name: str | None = None, subfolder: str | None = None,
+def save_decision(title: str, content: str, project_name: str | None = None,
+                   workspace: str | None = None, subfolder: str | None = None,
                    overwrite: bool = False, source_episodic: str | None = None,
                    agents: list[str] | None = None) -> str:
     """Save an architecture/product decision note.
 
-    professional=True writes to the professional-decisions folder;
-    professional=False into a project (project_name required), resolved
-    through the default workspace. overwrite=True updates in place.
+    project_name decides where it lands: omit it for a standalone decision in
+    the decisions folder, or name a project to file it there — in `workspace`,
+    or the default one (see list_workspaces). overwrite=True updates in place.
 
-    subfolder: required, and must match one of taxonomy.json's
-    project_subfolders, for a project that has any configured.
+    subfolder: project decisions only, and required when the project has any
+    configured in taxonomy.json's project_subfolders.
 
     source_episodic / agents stamp provenance frontmatter plus a `decided`
     date; omit both and the note is written as-is.
@@ -84,15 +84,14 @@ def save_decision(title: str, content: str, professional: bool = False,
     """
     verify_sections(content, ["**Decided:**", "**What it means:**"])
     content = _apply_provenance(content, source_episodic, agents)
-    if professional:
-        if subfolder is not None:
-            raise ValueError("`subfolder` only applies to project decisions (professional=False)")
-        root = require_role(PROFESSIONAL_DECISIONS, "professional_decisions")
+    if project_name is None:
+        for name, value in (("subfolder", subfolder), ("workspace", workspace)):
+            if value is not None:
+                raise ValueError(f"`{name}` only applies to project decisions; pass project_name too.")
+        root = require_role(DECISIONS, "decisions")
         path = safe_path(root / f"{slug(title)}.md")
     else:
-        if not project_name:
-            raise ValueError("project_name is required when professional=False")
-        _, root = resolve_workspace(professional=False)
+        _, root = resolve_workspace(workspace)
         resolved = resolve_project_subfolder(project_name, subfolder, project_subfolders.get(project_name))
         path = safe_path(root / project_name / resolved / f"Decision - {slug(title, 'Decision - ')}.md")
     return write(path, content, overwrite=overwrite)
@@ -103,7 +102,7 @@ def get_tech_analysis_history(project_name: str | None = None, limit: int = 10) 
     """List tech-analysis notes, most-recently modified first, capped at
     `limit`. project_name filters to filenames mentioning it."""
     validate_limit(limit)
-    root = require_role(PROFESSIONAL_TECH_ANALYSIS, "professional_tech_analysis")
+    root = require_role(TECH_ANALYSIS, "tech_analysis")
     check_area_allowed(root)
     needle = project_name.lower() if project_name else None
     paths = [p for p in iter_markdown(root) if not needle or needle in p.name.lower()]
@@ -111,17 +110,18 @@ def get_tech_analysis_history(project_name: str | None = None, limit: int = 10) 
 
 
 @mcp.tool()
-def get_solution_architecture_context(project_name: str, limit: int = 10) -> dict:
+def get_architecture_context(project_name: str, workspace: str | None = None,
+                              limit: int = 10) -> dict:
     """A project's own notes plus any tech-analysis and architecture notes
     whose filename mentions it, each capped at `limit`."""
     validate_limit(limit)
-    _, projects_root = resolve_workspace(professional=True)
+    _, projects_root = resolve_workspace(workspace)
     root_rel = projects_root / project_name
     check_area_allowed(root_rel)
     project_notes = read_capped(iter_markdown(root_rel), limit=limit)
     needle = project_name.lower()
-    tech_analysis_root = require_role(PROFESSIONAL_TECH_ANALYSIS, "professional_tech_analysis")
-    architecture_root = require_role(PROFESSIONAL_ARCHITECTURE, "professional_architecture")
+    tech_analysis_root = require_role(TECH_ANALYSIS, "tech_analysis")
+    architecture_root = require_role(ARCHITECTURE, "architecture")
     tech_analysis_notes = read_capped(
         [p for p in iter_markdown(tech_analysis_root) if needle in p.name.lower()], limit=limit
     )

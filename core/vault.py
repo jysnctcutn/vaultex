@@ -42,20 +42,20 @@ from .validation import (
 # Sourced from taxonomy.json, not hardcoded: Path if the role is configured
 # for this vault, else None. require_role() turns None into a clear error
 # instead of a silent no-op or silent folder creation.
-PROFESSIONAL_DECISIONS = roles["professional_decisions"]
-PROFESSIONAL_TECH_ANALYSIS = roles["professional_tech_analysis"]
-PROFESSIONAL_ARCHITECTURE = roles["professional_architecture"]
+DECISIONS = roles["decisions"]
+TECH_ANALYSIS = roles["tech_analysis"]
+ARCHITECTURE = roles["architecture"]
 PROFESSIONAL_PROJECTS = roles["professional_projects"]
-BUILDER_IDEAS = roles["builder_ideas"]
+IDEAS = roles["ideas"]
 BUILDER_PROJECTS = roles["builder_projects"]
 INBOX = roles["inbox"]
 EPISODIC = roles["episodic"]
 OPEN_QUESTIONS = roles["open_questions"]
 
 __all__ = [
-    "BUILDER_IDEAS", "BUILDER_PROJECTS", "EPISODIC", "INBOX", "MAX_LIMIT",
-    "OPEN_QUESTIONS", "PROFESSIONAL_ARCHITECTURE", "PROFESSIONAL_DECISIONS",
-    "PROFESSIONAL_PROJECTS", "PROFESSIONAL_TECH_ANALYSIS", "PlacementAmbiguous",
+    "IDEAS", "BUILDER_PROJECTS", "EPISODIC", "INBOX", "MAX_LIMIT",
+    "OPEN_QUESTIONS", "ARCHITECTURE", "DECISIONS",
+    "PROFESSIONAL_PROJECTS", "TECH_ANALYSIS", "PlacementAmbiguous",
     "TaxonomyNotConfigured", "VAULT_PATH", "VerificationError", "_auto_link",
     "_ensure_parent", "_reindex", "_reindex_move", "check_area_allowed",
     "infer_area", "iter_markdown", "move", "read", "read_capped",

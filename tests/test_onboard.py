@@ -10,6 +10,7 @@ the developer's real .env.
 import pytest
 
 import onboard
+from core import taxonomy
 from onboard import AUTHOR_TAXONOMY, PARA_TAXONOMY, ROLES, _upsert_env
 
 SECRETS = (
@@ -93,12 +94,26 @@ def test_tolerates_whitespace_around_an_existing_key(env_file):
 
 # --- shipped layout maps ----------------------------------------------------
 
-_ROLE_KEYS = {key for key, _ in ROLES}
+_PROMPTED = {key for key, _ in ROLES}          # what onboarding asks about
+_VALID = set(taxonomy.ROLE_KEYS)                # what taxonomy.json accepts
 
 
 @pytest.mark.parametrize("layout", [PARA_TAXONOMY, AUTHOR_TAXONOMY])
 def test_layouts_only_reference_known_roles(layout):
-    assert set(layout) <= _ROLE_KEYS
+    assert set(layout) <= _VALID
+
+
+def test_prompts_never_offer_the_legacy_project_roles():
+    """Project roots come from workspaces now, so a new user is never asked
+    to map builder_projects / professional_projects."""
+    assert "builder_projects" not in _PROMPTED
+    assert "professional_projects" not in _PROMPTED
+
+
+def test_prompts_carry_no_retired_vocabulary():
+    blob = " ".join(f"{k} {d}" for k, d in ROLES).lower()
+    assert "professional" not in blob
+    assert "builder" not in blob
 
 
 def test_para_layout_omits_the_project_roles():
@@ -114,8 +129,22 @@ def test_para_layout_puts_episodic_under_resources():
     assert PARA_TAXONOMY["episodic"].startswith("Resources/")
 
 
-def test_author_layout_still_covers_every_role():
-    assert set(AUTHOR_TAXONOMY) == _ROLE_KEYS
+def test_author_layout_covers_every_prompted_role():
+    assert set(AUTHOR_TAXONOMY) == _PROMPTED
+
+
+def test_author_layout_emits_no_retired_keys():
+    """Choosing the author layout must not write retired vocabulary into a
+    brand-new taxonomy.json — its two project roots go in as workspaces."""
+    retired = {"builder_projects", "professional_projects", *taxonomy.ROLE_ALIASES}
+    assert set(AUTHOR_TAXONOMY) & retired == set()
+
+
+def test_author_layout_supplies_its_project_roots_as_workspaces():
+    entries = onboard.AUTHOR_WORKSPACES["entries"]
+    assert entries["Projects"] == "02-Builder/Projects"
+    assert entries["Work"] == "01-Professional/Solution-Architecture/Projects"
+    assert onboard.AUTHOR_WORKSPACES["default"] in entries
 
 
 # --- the Basic flow, end to end ---------------------------------------------

@@ -22,6 +22,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from core.workspaces import ReservedWorkspaceName, check_name_allowed as check_workspace_name
+
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
@@ -29,13 +31,14 @@ TAXONOMY_PATH = Path(os.environ.get("TAXONOMY_JSON_PATH", str(BASE_DIR / "taxono
 POLICY_TEMPLATE = BASE_DIR / "write_policy.example.md"
 POLICY_FILENAME = "write_policy.md"
 
+# Project roots are not here: they come from workspaces (see
+# _prompt_workspaces), which is why the legacy builder_projects /
+# professional_projects keys are never offered to a new user.
 ROLES = [
-    ("builder_ideas", "App/project ideas not yet a project"),
-    ("builder_projects", "Personal/builder project work (decisions, features, brainstorms)"),
-    ("professional_decisions", "Professional decisions not tied to a specific project"),
-    ("professional_tech_analysis", "Technical/gap analysis notes"),
-    ("professional_architecture", "Professional architecture notes"),
-    ("professional_projects", "Professional/client project work"),
+    ("ideas", "Ideas not yet a project"),
+    ("decisions", "Decisions not tied to a specific project"),
+    ("tech_analysis", "Technical / gap-analysis notes"),
+    ("architecture", "Architecture notes"),
     ("inbox", "Default folder for captured brainstorms/conversation conclusions"),
     ("episodic", "Append-only agent session/event log (log_event, start_session, close_session)"),
     ("open_questions", "Durable per-project open questions promoted from agent runs (save_open_question)"),
@@ -49,26 +52,35 @@ PARA_FOLDERS = ["Projects", "Areas", "Resources", "Archive"]
 # Archive means "inactive", which misdescribes an append-only agent log.
 PARA_TAXONOMY = {
     "inbox": "0-Inbox",
-    "builder_ideas": "Resources/Ideas",
+    "ideas": "Resources/Ideas",
     "episodic": "Resources/Episodic",
-    "professional_decisions": "Areas/Decisions",
-    "professional_architecture": "Areas/Architecture",
-    "professional_tech_analysis": "Areas/Tech-Analysis",
+    "decisions": "Areas/Decisions",
+    "architecture": "Areas/Architecture",
+    "tech_analysis": "Areas/Tech-Analysis",
     "open_questions": "Areas/Open-Questions",
 }
 
 # The author's own vault layout. Not a default -- core/taxonomy.py ships with
 # every role unconfigured -- but offered as an opt-in starting point.
 AUTHOR_TAXONOMY = {
-    "builder_ideas": "02-Builder/Ideas",
-    "builder_projects": "02-Builder/Projects",
-    "professional_decisions": "01-Professional/Solution-Architecture/Decisions",
-    "professional_tech_analysis": "01-Professional/Solution-Architecture/Gap-Analysis",
-    "professional_architecture": "01-Professional/Solution-Architecture/Architecture",
-    "professional_projects": "01-Professional/Solution-Architecture/Projects",
+    "ideas": "02-Builder/Ideas",
+    "decisions": "01-Professional/Solution-Architecture/Decisions",
+    "tech_analysis": "01-Professional/Solution-Architecture/Gap-Analysis",
+    "architecture": "01-Professional/Solution-Architecture/Architecture",
     "inbox": "00-Inbox",
     "episodic": "02-Builder/Episodic",
     "open_questions": "02-Builder/Open-Questions",
+}
+
+# The two project roots this layout used to map to builder_projects /
+# professional_projects. Emitted as workspaces so choosing this option can't
+# write the retired keys into a brand-new taxonomy.json.
+AUTHOR_WORKSPACES = {
+    "default": "Projects",
+    "entries": {
+        "Projects": "02-Builder/Projects",
+        "Work": "01-Professional/Solution-Architecture/Projects",
+    },
 }
 
 MODE_EXPLAINER = """
@@ -186,15 +198,22 @@ def _choose_mode(existing: dict) -> str:
 
 def _prompt_workspaces(vault: Path) -> dict:
     """Workspaces are named project contexts. One is the common case -- being
-    handed a Personal/Work split you didn't ask for is the same imposition
-    the professional/builder flag was."""
+    handed a split you didn't ask for is the same imposition the old
+    professional/builder flag was."""
     print("\n--- Workspaces ---")
     print("A workspace is a named project context you can switch between, like")
     print("separate spaces for personal work, client work, and experiments.")
     print("Each becomes a folder under Projects/.")
     raw = input('\nName your workspaces, comma-separated (e.g. "Personal, Work, Sandbox"),\n'
                 "or press enter for a single workspace: ").strip()
-    names = [n.strip() for n in raw.split(",") if n.strip()]
+    names = []
+    for n in (n.strip() for n in raw.split(",")):
+        if not n:
+            continue
+        try:
+            names.append(check_workspace_name(n))
+        except ReservedWorkspaceName as e:
+            print(f"  skipped: {e}")
     # One unnamed workspace lives at Projects/ itself: no extra path layer for
     # someone who never asked for the distinction.
     entries = {name: f"Projects/{name}" for name in names} or {"Projects": "Projects"}
@@ -233,7 +252,8 @@ def _configure_layout(vault: Path, data: dict, folders: list[str]) -> None:
         data["workspaces"] = _prompt_workspaces(vault)
     elif choice == "3":
         data["roles"].update(AUTHOR_TAXONOMY)
-        _mkdirs(vault, AUTHOR_TAXONOMY.values())
+        data.setdefault("workspaces", AUTHOR_WORKSPACES)
+        _mkdirs(vault, [*AUTHOR_TAXONOMY.values(), *AUTHOR_WORKSPACES["entries"].values()])
         print("Applied the author's layout. Re-run this wizard any time to adjust roles.")
     elif choice == "4":
         print("Skipped — roles left as-is.")
@@ -246,6 +266,10 @@ def _configure_layout(vault: Path, data: dict, folders: list[str]) -> None:
                 data["roles"][key] = selected
             elif key not in data["roles"]:
                 data["roles"].setdefault(key, None)
+        # Project roots come from workspaces, not roles, so the guided path
+        # needs this too or it ends with nowhere to file a project note.
+        if not data.get("workspaces"):
+            data["workspaces"] = _prompt_workspaces(vault)
 
 
 def _configure_custom_categories(data: dict) -> None:

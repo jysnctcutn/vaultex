@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Reproducible benchmark: gathering project context in a *new* AI client
 session by hand (find the right notes, open each, copy the content) vs. one
-`get_solution_architecture_context` tool call.
+`get_architecture_context` tool call.
 
 This does not measure time or tokens saved on the content itself — the
 content transferred is the same either way, the AI still has to read it.
@@ -158,7 +158,7 @@ FIXTURE_NOTES = {
 
         Unrelated tech-analysis note for a different project, sitting in
         the same folder. Exists in this fixture only to prove that
-        get_solution_architecture_context() filters by project name
+        get_architecture_context() filters by project name
         instead of returning everything in the folder.
         """),
     "02-Professional/Architecture/Other-Client - Network diagram.md": textwrap.dedent("""\
@@ -172,10 +172,10 @@ FIXTURE_NOTES = {
 TAXONOMY = {
     "roles": {
         "professional_projects": "02-Professional/Projects",
-        "professional_tech_analysis": "02-Professional/Tech-Analysis",
-        "professional_architecture": "02-Professional/Architecture",
-        "professional_decisions": "02-Professional/Decisions",
-        "builder_ideas": None,
+        "tech_analysis": "02-Professional/Tech-Analysis",
+        "architecture": "02-Professional/Architecture",
+        "decisions": "02-Professional/Decisions",
+        "ideas": None,
         "builder_projects": None,
         "inbox": None,
     },
@@ -184,7 +184,7 @@ TAXONOMY = {
 
 RUNNER_SCRIPT = textwrap.dedent("""\
     import json
-    from core.tools.architecture import get_solution_architecture_context
+    from core.tools.architecture import get_architecture_context
     from core.vault import (
         PROFESSIONAL_ARCHITECTURE,
         PROFESSIONAL_PROJECTS,
@@ -195,7 +195,7 @@ RUNNER_SCRIPT = textwrap.dedent("""\
     PROJECT = "Acme-Redesign"
 
     # What the tool actually returns via one call.
-    result = get_solution_architecture_context(PROJECT)
+    result = get_architecture_context(PROJECT)
     tool_notes = [n for group in result.values() for n in group]
 
     # Ground truth for what a human would have to manually track down across

@@ -19,16 +19,27 @@ TAXONOMY_PATH = TAXONOMY_JSON_PATH
 # Every built-in role key this server understands. onboard.py walks this
 # list; core/vault.py exposes one Path|None constant per entry.
 ROLE_KEYS = [
-    "builder_ideas",
-    "builder_projects",
-    "professional_decisions",
-    "professional_tech_analysis",
-    "professional_architecture",
-    "professional_projects",
+    "ideas",
+    "decisions",
+    "tech_analysis",
+    "architecture",
     "inbox",
     "episodic",
     "open_questions",
+    # Superseded by workspaces; kept as the derivation source for a vault
+    # with no `workspaces` block. See core/workspaces.py.
+    "builder_projects",
+    "professional_projects",
 ]
+
+# Silent read aliases: an existing taxonomy.json keeps working, but these are
+# never emitted by onboarding and never shown to a new user. No removal date.
+ROLE_ALIASES = {
+    "builder_ideas": "ideas",
+    "professional_decisions": "decisions",
+    "professional_tech_analysis": "tech_analysis",
+    "professional_architecture": "architecture",
+}
 
 
 @dataclass
@@ -54,9 +65,19 @@ def load_raw() -> dict:
 
 _data = load_raw()
 
-roles: dict[str, Path | None] = {
-    key: (Path(value) if value else None) for key, value in {**dict.fromkeys(ROLE_KEYS), **_data.get("roles", {})}.items()
-}
+
+def _resolve_roles(configured: dict) -> dict[str, Path | None]:
+    """Canonical key wins; an old key fills in only where the new one is
+    absent, so a half-migrated taxonomy.json resolves predictably rather
+    than depending on dict order."""
+    merged = {**dict.fromkeys(ROLE_KEYS), **{k: v for k, v in configured.items() if k in ROLE_KEYS}}
+    for old, new in ROLE_ALIASES.items():
+        if merged.get(new) is None and configured.get(old):
+            merged[new] = configured[old]
+    return {k: (Path(v) if v else None) for k, v in merged.items()}
+
+
+roles: dict[str, Path | None] = _resolve_roles(_data.get("roles", {}))
 
 custom_categories: list[CustomCategory] = [
     CustomCategory(

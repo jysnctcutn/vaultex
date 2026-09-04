@@ -32,8 +32,8 @@ def grep(query: str, areas: list[str] | None = None, limit: int = 20) -> list[di
     no embeddings. Use it for exact strings (error messages, config keys,
     identifiers); use `search` for everything else.
 
-    areas optionally restricts to top-level folders, e.g. ["02-Builder",
-    "03-Knowledge"]. Excluded areas are never returned regardless of `areas`.
+    areas optionally restricts to top-level folders, e.g. ["Projects",
+    "Areas"]. Excluded areas are never returned regardless of `areas`.
     """
     validate_limit(limit)
     return _grep(query, areas, limit)

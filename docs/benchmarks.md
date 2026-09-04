@@ -18,7 +18,7 @@ spread across three folders the way a real Solution-Architecture project
 actually accumulates them — project notes, tech-analysis notes, architecture
 notes — plus two unrelated notes sitting in those same folders, to check
 that filtering by project actually works rather than just counting files.
-It then runs the real `get_solution_architecture_context()` tool code
+It then runs the real `get_architecture_context()` tool code
 against that fixture — not a simulation of it. Reproduce it yourself:
 
 ```bash

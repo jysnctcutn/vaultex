@@ -24,7 +24,7 @@ core/
     builder.py         get_app_ideas, create_app_idea
     projects.py        get_project_context, get_feature_context, update_feature
     architecture.py    get_architecture_decisions, save_decision,
-                       get_tech_analysis_history, get_solution_architecture_context
+                       get_tech_analysis_history, get_architecture_context
     capture.py         save_brainstorm
     episodic.py        log_event, start_session, update_session, close_session,
                        get_episodic_context
