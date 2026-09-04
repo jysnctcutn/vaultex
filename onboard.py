@@ -95,7 +95,7 @@ Vaultex runs in one of two modes.
 def _vault_path() -> Path:
     raw = os.environ.get("VAULTEX_PATH")
     if not raw:
-        raise SystemExit("VAULTEX_PATH isn't set in .env — set that up first (see README Quick start).")
+        raise SystemExit("VAULTEX_PATH isn't set in .env — set that up first (see docs/installation.md).")
     path = Path(raw).expanduser().resolve()
     if not path.exists():
         raise SystemExit(f"VAULTEX_PATH does not exist: {path}")

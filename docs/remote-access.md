@@ -6,7 +6,7 @@
 (`core/oauth/`) — no third-party gateway required. `docker-compose.yml`
 bundles it with a Tailscale sidecar so remote (web/mobile) access needs
 nothing installed on the host beyond Docker and your own Tailscale account.
-See [Quick start → Path B](../README.md#quick-start) for the actual setup
+See [Installation → Path B](installation.md#4-pick-a-path-and-run-it) for the actual setup
 commands.
 
 ```

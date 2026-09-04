@@ -1,7 +1,7 @@
 """
 Vaultex — Interactive Installer
 
-One command that walks through everything README.md's "Quick start"
+One command that walks through everything docs/installation.md's manual setup
 otherwise has you do by hand: pick/create a vault, choose Path A (this
 machine only) or Path B (Docker + Tailscale, reachable remotely), install
 dependencies, set up the folder taxonomy, build the semantic-search index,

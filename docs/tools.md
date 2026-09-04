@@ -37,7 +37,7 @@
 The counts above are Professional mode (31 tools). In **Basic mode** only
 `search`, `grep`, `read_note`, and `write_note` are registered — the rest are
 never imported, so they don't appear in `tools/list` at all. See
-[Modes](../README.md#modes).
+[Modes](modes.md).
 
 18 of the 31 tools (everything except `read_note`, `search`, `grep`,
 `write_note`, `list_workspaces`, `save_brainstorm`, `get_tags`,
