@@ -11,6 +11,10 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
     pip install --no-cache-dir -r requirements.txt
 
 COPY core/ core/
-COPY server.py index_vault.py ./
+# onboard.py ships too: docker-compose.yml documents
+# `docker compose exec -it vaultex python3 onboard.py` as the Path B way to
+# pick a mode and map the taxonomy, and it needs write_policy.example.md to
+# seed the vault's write_policy.md.
+COPY server.py index_vault.py onboard.py write_policy.example.md ./
 
 CMD ["python3", "server.py"]

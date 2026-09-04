@@ -1,9 +1,9 @@
-"""write_policy.md's toggles wired into core/vault.py, plus the two fixes
-that ride along with them: slug() filename sanitization and the guard that
-stops any tool writing the policy file itself.
+"""write_policy.md's toggles wired into core/notes.py and core/naming.py,
+plus the two fixes that ride along with them: slug() filename sanitization
+and the guard that stops any tool writing the policy file itself.
 
-Follows test_vault_semantic_hooks.py's approach for the semantic-gated
-paths -- monkeypatch the embeddings names in core.vault's own namespace so
+Follows test_notes_semantic_hooks.py's approach for the semantic-gated
+paths -- monkeypatch the embeddings names in core.notes' own namespace so
 the real branch logic runs without loading a model.
 """
 
@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 import core.policy as policy_mod
-import core.vault as vault_mod
+import core.notes as notes_mod
 from core.embeddings import is_indexable
 from core.vault import (
     PlacementAmbiguous,
@@ -47,10 +47,10 @@ def _write_policy_file(**toggles) -> None:
 def semantic_enabled(monkeypatch, tmp_path):
     fake_db = tmp_path / "vault_embeddings.db"
     fake_db.write_text("")
-    monkeypatch.setattr(vault_mod, "EMBEDDINGS_DB_PATH", fake_db)
-    monkeypatch.setattr(vault_mod, "_SEMANTIC_DEPS_AVAILABLE", True)
-    monkeypatch.setattr(vault_mod, "get_model", lambda: "fake-model")
-    monkeypatch.setattr(vault_mod, "_embeddings_connect", lambda path: _FakeConn())
+    monkeypatch.setattr(notes_mod, "EMBEDDINGS_DB_PATH", fake_db)
+    monkeypatch.setattr(notes_mod, "_SEMANTIC_DEPS_AVAILABLE", True)
+    monkeypatch.setattr(notes_mod, "get_model", lambda: "fake-model")
+    monkeypatch.setattr(notes_mod, "_embeddings_connect", lambda path: _FakeConn())
     return fake_db
 
 
@@ -106,7 +106,7 @@ def test_inference_off_returns_default_without_touching_semantics(semantic_enabl
     def _boom(*args, **kwargs):
         raise AssertionError("semantic lookup should not run when inference is off")
 
-    monkeypatch.setattr(vault_mod, "_find_related", _boom)
+    monkeypatch.setattr(notes_mod, "_find_related", _boom)
     default = Path("00-Inbox")
     assert infer_area("title", "content", default) == default
 
@@ -116,7 +116,7 @@ def test_inference_off_never_raises_placement_ambiguous(semantic_enabled, monkey
     off: turning inference off has to remove the failure mode, not just the
     guessing."""
     monkeypatch.setattr(
-        vault_mod, "_find_related",
+        notes_mod, "_find_related",
         lambda *a, **k: [
             {"path": "02-Builder/one.md"},
             {"path": "03-Knowledge/two.md"},
@@ -136,7 +136,7 @@ def test_inference_off_never_raises_placement_ambiguous(semantic_enabled, monkey
 def test_auto_link_off_by_policy(semantic_enabled, monkeypatch):
     _write_policy_file(auto_link_on_save=False)
     monkeypatch.setattr(
-        vault_mod, "_find_related",
+        notes_mod, "_find_related",
         lambda *a, **k: [{"path": "00-Inbox/Related One.md"}],
     )
     assert _auto_link(VAULT_PATH / "new-note.md", "some body") == "some body"
@@ -146,7 +146,7 @@ def test_write_auto_link_false_skips_footer_even_when_policy_allows(semantic_ena
     """The zero-inference path (write_note) bypasses auto-link regardless of
     what the policy says -- it never consults the policy at all."""
     monkeypatch.setattr(
-        vault_mod, "_find_related",
+        notes_mod, "_find_related",
         lambda *a, **k: [{"path": "00-Inbox/Related One.md"}],
     )
     linked, raw = scratch / "linked.md", scratch / "raw.md"

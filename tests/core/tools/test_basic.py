@@ -9,7 +9,7 @@ import shutil
 import pytest
 
 import core.policy as policy_mod
-import core.vault as vault_mod
+import core.notes as notes_mod
 from core.tools.basic import write_note
 from core.vault import VAULT_PATH
 
@@ -81,11 +81,11 @@ def test_never_appends_related_notes(monkeypatch, tmp_path, scratch):
     available and the policy toggle left on."""
     fake_db = tmp_path / "vault_embeddings.db"
     fake_db.write_text("")
-    monkeypatch.setattr(vault_mod, "EMBEDDINGS_DB_PATH", fake_db)
-    monkeypatch.setattr(vault_mod, "_SEMANTIC_DEPS_AVAILABLE", True)
-    monkeypatch.setattr(vault_mod, "get_model", lambda: "fake-model")
-    monkeypatch.setattr(vault_mod, "_embeddings_connect", lambda path: _FakeConn())
-    monkeypatch.setattr(vault_mod, "_find_related", lambda *a, **k: [{"path": "00-Inbox/Related.md"}])
+    monkeypatch.setattr(notes_mod, "EMBEDDINGS_DB_PATH", fake_db)
+    monkeypatch.setattr(notes_mod, "_SEMANTIC_DEPS_AVAILABLE", True)
+    monkeypatch.setattr(notes_mod, "get_model", lambda: "fake-model")
+    monkeypatch.setattr(notes_mod, "_embeddings_connect", lambda path: _FakeConn())
+    monkeypatch.setattr(notes_mod, "_find_related", lambda *a, **k: [{"path": "00-Inbox/Related.md"}])
 
     write_note(f"{scratch.name}/note.md", "body")
     assert (scratch / "note.md").read_text(encoding="utf-8") == "body"
