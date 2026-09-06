@@ -1,15 +1,12 @@
 """Vault search tools: `search` (RRF hybrid, the default) and `grep` (substring)."""
 
-import sqlite3
 from pathlib import Path
 
 from ..config import EMBEDDINGS_DB_PATH, EXCLUDED_AREAS, SEARCH_LOG, VAULT_PATH, logger
-from ..embeddings import _SEMANTIC_DEPS_AVAILABLE, get_model, log_search_event
+from ..db import log_search_event, semantic_query
+from ..embeddings import _SEMANTIC_DEPS_AVAILABLE
 from ..mcp_app import mcp
 from ..vault import iter_markdown, read, safe_path, top_level_area, validate_limit
-
-if _SEMANTIC_DEPS_AVAILABLE:
-    import sqlite_vec
 
 # RRF rank-bias constant; 60 is the value from the original RRF paper.
 RRF_K = 60
@@ -35,8 +32,8 @@ def grep(query: str, areas: list[str] | None = None, limit: int = 20) -> list[di
     no embeddings. Use it for exact strings (error messages, config keys,
     identifiers); use `search` for everything else.
 
-    areas optionally restricts to top-level folders, e.g. ["02-Builder",
-    "03-Knowledge"]. Excluded areas are never returned regardless of `areas`.
+    areas optionally restricts to top-level folders, e.g. ["Projects",
+    "Areas"]. Excluded areas are never returned regardless of `areas`.
     """
     validate_limit(limit)
     return _grep(query, areas, limit)
@@ -80,40 +77,20 @@ def _semantic_search(query: str, limit: int) -> list[dict]:
             "Run `python3 index_vault.py` first to build it."
         )
 
-    query_embedding = get_model().encode(
-        f"Represent this sentence for searching relevant passages: {query}",
-        normalize_embeddings=True,
-    )
-
-    conn = sqlite3.connect(EMBEDDINGS_DB_PATH)
-    conn.enable_load_extension(True)
-    sqlite_vec.load(conn)
-    conn.enable_load_extension(False)
-    try:
-        rows = conn.execute(
-            """
-            SELECT c.path, c.heading, c.chunk_text,
-                   vec_distance_cosine(v.embedding, ?) AS distance
-            FROM vec_chunks v JOIN chunks c ON c.id = v.rowid
-            ORDER BY distance ASC
-            LIMIT ?
-            """,
-            (sqlite_vec.serialize_float32(query_embedding.tolist()), limit * 3),
-        ).fetchall()
-    finally:
-        conn.close()
+    rows = semantic_query(EMBEDDINGS_DB_PATH, query, limit)
 
     results: list[dict] = []
     seen_paths: set[str] = set()
-    for path, heading, chunk_text, distance in rows:
+    for row in rows:
+        path = row["path"]
         if top_level_area(Path(path)) in EXCLUDED_AREAS or path in seen_paths:
             continue
         seen_paths.add(path)
         results.append({
             "path": path,
-            "heading": heading,
-            "snippet": chunk_text[:180].strip(),
-            "distance": distance,
+            "heading": row["heading"],
+            "snippet": row["chunk_text"][:180].strip(),
+            "distance": row["distance"],
         })
         if len(results) >= limit:
             break

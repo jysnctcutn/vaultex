@@ -80,7 +80,7 @@ Out of scope (examples):
 
 ## Security model (summary)
 
-Vaultex is designed as a **local-first, single-operator** tool. See the README's ["Security model"](README.md#security-model) section for the full breakdown, and [ASSURANCE_CASE.md](ASSURANCE_CASE.md) for the claim-by-claim argument and evidence behind each security requirement below. In short:
+Vaultex is designed as a **local-first, single-operator** tool. See [docs/security-model.md](docs/security-model.md) for the full breakdown, and [ASSURANCE_CASE.md](ASSURANCE_CASE.md) for the claim-by-claim argument and evidence behind each security requirement below. In short:
 
 - Path safety blocks `..` traversal and respects `EXCLUDED_AREAS`, enforced against the resolved path rather than the input string
 - Bearer-token auth uses timing-safe comparison (`secrets.compare_digest`); optional OAuth 2.1 with redirect-host allowlisting, PKCE, and per-login/per-IP lockout on `/login`

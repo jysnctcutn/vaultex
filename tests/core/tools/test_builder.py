@@ -10,7 +10,7 @@ from core.vault import read, safe_path, write
 @pytest.fixture
 def builder_ideas_root(monkeypatch):
     root = Path(f"02-Builder/Ideas-{uuid.uuid4().hex[:8]}")
-    monkeypatch.setattr(builder_mod, "BUILDER_IDEAS", root)
+    monkeypatch.setattr(builder_mod, "IDEAS", root)
     yield root
 
 

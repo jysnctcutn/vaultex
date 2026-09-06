@@ -36,6 +36,6 @@ def test_update_feature_writes_into_configured_subfolder(configured_project):
 
 
 def test_save_decision_rejects_subfolder_when_professional():
-    with pytest.raises(ValueError, match="only applies to Builder projects"):
+    with pytest.raises(ValueError, match="only applies to project decisions"):
         save_decision("Title", "**Decided:** x\n**What it means:** y",
-                       professional=True, subfolder="architecture")
+                       subfolder="architecture")

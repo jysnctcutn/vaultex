@@ -77,7 +77,7 @@ def distill_session(session_path: str, limit: int = 20) -> dict:
         "project": project,
         "already_promoted": bool(fm.get("promoted", False)),
         "session_status": fm.get("status"),
-        "project_context": get_project_context(project, professional=False, limit=limit),
+        "project_context": get_project_context(project, limit=limit),
         "existing_open_questions": open_questions,
         "proposal_schema": PROPOSAL_SCHEMA,
     }
@@ -122,7 +122,7 @@ def apply_distillation(session_path: str, proposal: dict, confirm: bool = False)
     from .open_questions import save_open_question
 
     created_decisions = [
-        save_decision(d["title"], d["body"], professional=False, project_name=project,
+        save_decision(d["title"], d["body"], project_name=project,
                       subfolder=d.get("subfolder"), source_episodic=session_rel, agents=agents)
         for d in proposal.get("new_decisions", [])
     ]

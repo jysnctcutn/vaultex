@@ -1,7 +1,7 @@
 """
 Vaultex — Interactive Installer
 
-One command that walks through everything README.md's "Quick start"
+One command that walks through everything docs/installation.md's manual setup
 otherwise has you do by hand: pick/create a vault, choose Path A (this
 machine only) or Path B (Docker + Tailscale, reachable remotely), install
 dependencies, set up the folder taxonomy, build the semantic-search index,
@@ -45,11 +45,11 @@ REFERENCE_LAYOUT = [
 ]
 
 DEFAULT_ROLE_MAP = {
-    "builder_ideas": "02-Builder/Ideas",
+    "ideas": "02-Builder/Ideas",
     "builder_projects": "02-Builder/Projects",
-    "professional_decisions": "01-Professional/Solution-Architecture/Decisions",
-    "professional_tech_analysis": "01-Professional/Solution-Architecture/Analysis",
-    "professional_architecture": "01-Professional/Solution-Architecture/Architecture",
+    "decisions": "01-Professional/Solution-Architecture/Decisions",
+    "tech_analysis": "01-Professional/Solution-Architecture/Analysis",
+    "architecture": "01-Professional/Solution-Architecture/Architecture",
     "professional_projects": "01-Professional/Solution-Architecture/Projects",
     "inbox": "00-Inbox",
 }

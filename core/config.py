@@ -7,6 +7,7 @@ precedence over `.env`, so a one-off `FOO=bar python3 server.py` still works.
 
     VAULTEX_PATH=/path/to/vaultex
     MCP_AUTH_TOKEN=<long-random-secret>
+    VAULTEX_MODE=          # basic | professional; unset = derived from taxonomy.json
     EXCLUDED_AREAS=          # e.g. "01-Professional" to hide client/employer work
     READ_ONLY=false          # true = only read-style tools are registered at all
     ENABLE_NOTE_MOVE=false   # true = registers move_note (move/rename within the vault);
@@ -50,6 +51,10 @@ try:
     PORT = int(_PORT_RAW)
 except ValueError:
     raise SystemExit(f"MCP_PORT must be an integer, got: {_PORT_RAW!r}") from None
+
+# basic | professional. Unset means "derive it" -- core/mode.py owns that,
+# since deriving needs taxonomy.json and this module stays taxonomy-unaware.
+VAULTEX_MODE = (os.environ.get("VAULTEX_MODE") or "").strip().lower() or None
 
 EMBEDDINGS_DB_PATH = Path(
     os.environ.get("VAULT_EMBEDDINGS_DB", str(BASE_DIR / "vault_embeddings.db"))

@@ -19,6 +19,11 @@ def _run_with_env(extra_env: dict) -> subprocess.CompletedProcess:
         **os.environ,
         "VAULTEX_PATH": vault,
         "MCP_AUTH_TOKEN": "test-token",
+        # Empty, not absent: load_dotenv() would otherwise supply the
+        # developer's real value, so the "unset" branches under test would
+        # only ever run in CI. An explicit empty wins and reads as unset.
+        "AUTHORIZE_PASSWORD": "",
+        "VAULTEX_MODE": "",
         **extra_env,
     }
     return subprocess.run(

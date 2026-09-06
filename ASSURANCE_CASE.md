@@ -70,7 +70,7 @@ tool but says nothing about how expensive one call can be.
 
 **Evidence**:
 - `core/middleware.py:RateLimitMiddleware` — sliding window, applied before auth, default 120 req/60s
-- `core/vault.py:validate_limit` (`MAX_LIMIT = 200`) — every tool with a `limit` parameter (`search`, `grep`, `get_app_ideas`, `get_project_context`, `get_architecture_decisions`, `get_tech_analysis_history`, `get_solution_architecture_context`) rejects an out-of-range value instead of silently accepting it
+- `core/vault.py:validate_limit` (`MAX_LIMIT = 200`) — every tool with a `limit` parameter (`search`, `grep`, `get_app_ideas`, `get_project_context`, `get_architecture_decisions`, `get_tech_analysis_history`, `get_architecture_context`) rejects an out-of-range value instead of silently accepting it
 - `tests/core/test_vault_helpers.py` — regression tests for zero, negative, over-max, and non-integer `limit` values
 
 ## Claim 6: OAuth 2.1 remote access cannot be completed by an unauthorized party, even though dynamic client registration is unauthenticated by spec
