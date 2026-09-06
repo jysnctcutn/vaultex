@@ -2,7 +2,7 @@
 user-defined custom categories. core/vault.py and core/tools/custom.py both
 read from this module; nothing else should touch taxonomy.json directly.
 
-No file at all (fresh clone, before `python3 onboard.py` has run) means a
+No file at all (fresh clone, before `python3 setup/onboard.py` has run) means a
 fully taxonomy-free server: every role is None, custom_categories is empty.
 That's deliberate — see the "Naming change"/onboarding decision notes for
 why nothing here defaults to JC's own folder layout.

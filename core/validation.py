@@ -21,7 +21,7 @@ class VerificationError(ValueError):
 def require_role(path: Path | None, role_key: str) -> Path:
     if path is None:
         raise TaxonomyNotConfigured(
-            f"'{role_key}' isn't configured for this vault. Run `python3 onboard.py` to set it up."
+            f"'{role_key}' isn't configured for this vault. Run `python3 setup/onboard.py` to set it up."
         )
     return path
 

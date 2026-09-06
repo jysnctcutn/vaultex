@@ -12,9 +12,12 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 
 COPY core/ core/
 # onboard.py ships too: docker-compose.yml documents
-# `docker compose exec -it vaultex python3 onboard.py` as the Path B way to
-# pick a mode and map the taxonomy, and it needs write_policy.example.md to
-# seed the vault's write_policy.md.
-COPY server.py index_vault.py onboard.py write_policy.example.md ./
+# `docker compose exec -it vaultex python3 setup/onboard.py` as the Path B way to
+# map the taxonomy, and it needs write_policy.example.md to seed the vault's
+# write_policy.md. install_ui.py comes with it -- onboard.py draws the same
+# selector install.py does, and that runs in here, not on the host. (Mode is
+# not set here: it's VAULTEX_MODE in .env, chosen by install.py.)
+COPY server.py index_vault.py write_policy.example.md ./
+COPY setup/onboard.py setup/install_ui.py setup/
 
 CMD ["python3", "server.py"]

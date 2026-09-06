@@ -11,20 +11,34 @@ upgrade or uninstall.
 
 ```bash
 git clone https://github.com/jysnctcutn/vaultex.git
-python3 install.py   # macOS/Linux
-python install.py    # Windows
+python3 setup/install.py   # macOS/Linux
+python setup/install.py    # Windows
 ```
 
-It walks through everything the manual stages below cover by hand:
-- Points at an existing vault, or creates one
-- Choose Path A (this machine only) or Path B (also reachable from Claude
-  web/mobile)
-- Installs dependencies — venv + pip for Path A, Docker + Tailscale for
-  Path B
-- Sets up your folder taxonomy: guided, a sensible default, or skip for now
-- Builds the semantic-search index automatically
-- Prints your access token and, on Path A, offers to start the server
-  right away
+It walks through everything the manual stages below cover by hand, as four
+decisions — most of them a single Enter:
+
+| | Step | Choices |
+|---|---|---|
+| Pre-flight | advisory only, never blocks | |
+| 1 | **Vault** | create a new one (`~/vaultex`), or point at one you have |
+| 2 | **Access** | this machine only, or also reachable from Claude web/mobile |
+| 3 | **Mode** | [Professional or Basic](modes.md) — 31 tools or 4 |
+| 4 | **Layout** | Professional only: `simple`, map your own folders, or the author's |
+
+Path B adds three sub-steps inside step 2 (Docker check, Tailscale auth key,
+authorize password); the top-level count stays four. Basic finishes at step 3
+— it imposes no folder structure, so there is no layout to choose.
+
+Around those decisions it installs dependencies (venv + pip for Path A,
+Docker + Tailscale for Path B), builds the semantic-search index, prints your
+access token, and on Path A offers to start the server right away. Each
+answered step collapses to a single line, so the finished screen is a summary
+you can scroll back to.
+
+If Docker isn't running when you pick remote access, it offers to continue as
+a local install rather than stopping — you can re-run it and switch later
+without undoing anything.
 
 Once it's running, connect your client — see
 [Connect your AI](../README.md#connect-your-ai).
@@ -48,7 +62,7 @@ Path A (local only) or Path B (self-hosted, reachable remotely).
 | Need | Path A | Path B |
 |---|---|---|
 | A vault — a folder of markdown notes. [Obsidian](https://obsidian.md) is the common way to manage one, but the server itself just needs the folder, not Obsidian running. | required | required |
-| Python 3 | required | not required (only if you want `onboard.py` to run outside the container — see stage 3) |
+| Python 3 | required | not required (only if you want `setup/onboard.py` to run outside the container — see stage 3) |
 | Docker Desktop | — | required |
 | A free [Tailscale](https://tailscale.com) account | — | required |
 
@@ -96,25 +110,39 @@ Every variable is listed in the
 
 ### 3. Pick a mode (and, in Professional, a folder layout)
 
+Set the mode in `.env`:
+
 ```bash
-python3 onboard.py
+VAULTEX_MODE=professional   # or: basic
 ```
 
-Its first question is [Basic or Professional](modes.md), and it explains
-both before you answer. The choice is written to `.env` as `VAULTEX_MODE`.
+[Basic or Professional](modes.md) decides which tools register at all — 4
+or 31. `setup/install.py` asks this at step 3; setting it by hand here is the
+manual equivalent. Leaving it blank derives the mode from whether
+`taxonomy.json` has anything configured.
 
 **Basic** finishes here — four tools, no taxonomy, your folders left alone.
 
 **Professional** continues to a layout:
 
-1. **PARA** — scaffolds `Projects/ Areas/ Resources/ Archive/` and maps the
-   built-in roles into them (recommended for a fresh vault)
+```bash
+python3 setup/onboard.py
+```
+
+1. **Simple structure** — scaffolds `Projects/ Areas/ Resources/ Archive/`
+   and maps the built-in roles into them (recommended for a fresh vault;
+   recorded as `"preset": "simple"`)
 2. **Guided** — map each role onto folders you already have
-3. **Author's layout** — the maintainer's own structure, as a starting point
+3. **Author's layout** — the maintainer's own structure, as a starting
+   point. Hidden on a vault that already has folders; `--advanced` shows it
 4. **Skip** — leave roles unconfigured for now
 
 Then it asks what to call your workspaces (press enter for a single one),
 and seeds a [`write_policy.md`](write-policy.md) into your vault.
+`setup/onboard.py --add-workspace` names one more later, without the full wizard.
+
+`setup/onboard.py` does not ask about mode: it is the taxonomy specialist, and
+mode belongs to the installer.
 
 Skipping this stage entirely still leaves a working server: with no
 taxonomy, the mode derives to Basic. Full detail in
@@ -162,9 +190,10 @@ docker compose up -d --build
 #    command's session ends instead of persisting in the background.
 docker compose exec tailscale tailscale funnel --bg 8000
 
-# 3. Didn't run stage 3 (onboard.py) locally? Do it here instead — same
-#    effect, writes to the same taxonomy.json:
-docker compose exec -it vaultex python3 onboard.py
+# 3. Didn't run stage 3 (setup/onboard.py) locally? Do it here instead — same
+#    effect, writes to the same taxonomy.json. Set VAULTEX_MODE in .env
+#    separately; setup/onboard.py doesn't touch it:
+docker compose exec -it vaultex python3 setup/onboard.py
 
 # 4. Build the semantic-search index (optional, same as Path A)
 docker compose exec vaultex python3 index_vault.py

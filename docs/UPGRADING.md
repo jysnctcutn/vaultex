@@ -69,4 +69,4 @@ in a way that breaks existing calls.
 - Once the project has enough of a user base that pinning to an older
   tagged release is common, this document will also start tracking which
   older versions remain security-supported (today: only `main` /latest tag,
-  per [SECURITY.md](SECURITY.md)).
+  per [SECURITY.md](../SECURITY.md)).

@@ -56,7 +56,7 @@ services:
       # Same reasoning as .env below: env_file only injects vars at
       # container start, it doesn't put the file itself in the container's
       # filesystem — bind-mount it so `docker compose exec -it vaultex
-      # python3 onboard.py` has somewhere durable to write.
+      # python3 setup/onboard.py` has somewhere durable to write.
       - ./.env:/app/.env
       - ./taxonomy.json:/app/taxonomy.json
     restart: unless-stopped

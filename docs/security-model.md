@@ -44,7 +44,7 @@ re-check themselves, not just asserted:
   `core/embeddings.py`) uses parameterized `?` placeholders, no string-built
   queries.
 - **No command injection** — no `shell=True`, no `eval`/`exec` anywhere in the
-  codebase; `install.py`'s `subprocess` calls use list-form arguments against
+  codebase; `setup/install.py`'s `subprocess` calls use list-form arguments against
   fixed commands, never attacker-controlled input.
 - **Vault-root escape is blocked** — `safe_path()`'s containment check
   (`VAULT_PATH not in candidate.parents`) rejects any resolved path landing

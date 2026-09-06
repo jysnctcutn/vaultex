@@ -11,7 +11,7 @@ verified directly against the running code and repository during the
 assumed from documentation.
 
 This is a self-authored assurance case, not a third-party audit — see
-[SECURITY.md](SECURITY.md) for the same caveat. It should be revisited
+[SECURITY.md](../SECURITY.md) for the same caveat. It should be revisited
 whenever a security-relevant claim below stops being true, not just on a
 schedule.
 
@@ -103,5 +103,5 @@ delegated entirely to the `mcp` SDK.
 
 ## Related
 
-- [SECURITY.md](SECURITY.md) — vulnerability reporting process and the security-model summary this assurance case expands on
+- [SECURITY.md](../SECURITY.md) — vulnerability reporting process and the security-model summary this assurance case expands on
 - [[OpenSSF Best Practices Passing Badge — Compliance Record]] — the vault note this assurance case's evidence was gathered during

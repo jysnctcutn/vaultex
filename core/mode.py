@@ -24,5 +24,5 @@ if MODE == PROFESSIONAL and not _HAS_TAXONOMY:
     # Otherwise every structured tool registers and then fails at call time.
     logger.warning(
         "Professional mode with no taxonomy configured -- structured tools will "
-        "report 'not configured'. Run `python3 onboard.py`, or set VAULTEX_MODE=basic."
+        "report 'not configured'. Run `python3 setup/onboard.py`, or set VAULTEX_MODE=basic."
     )

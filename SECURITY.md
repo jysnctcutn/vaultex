@@ -30,7 +30,7 @@ git tag -v v0.3.0
 
 Tags before `v0.3.0` predate this process and are not signed; if you need
 integrity assurance for those, use `main` or upgrade to a signed release
-per [UPGRADING.md](UPGRADING.md).
+per [UPGRADING.md](docs/UPGRADING.md).
 
 The private signing key lives only on the maintainer's local machine — it
 is never stored in this repository or on any site used to distribute the
@@ -80,7 +80,7 @@ Out of scope (examples):
 
 ## Security model (summary)
 
-Vaultex is designed as a **local-first, single-operator** tool. See [docs/security-model.md](docs/security-model.md) for the full breakdown, and [ASSURANCE_CASE.md](ASSURANCE_CASE.md) for the claim-by-claim argument and evidence behind each security requirement below. In short:
+Vaultex is designed as a **local-first, single-operator** tool. See [docs/security-model.md](docs/security-model.md) for the full breakdown, and [ASSURANCE_CASE.md](docs/ASSURANCE_CASE.md) for the claim-by-claim argument and evidence behind each security requirement below. In short:
 
 - Path safety blocks `..` traversal and respects `EXCLUDED_AREAS`, enforced against the resolved path rather than the input string
 - Bearer-token auth uses timing-safe comparison (`secrets.compare_digest`); optional OAuth 2.1 with redirect-host allowlisting, PKCE, and per-login/per-IP lockout on `/login`

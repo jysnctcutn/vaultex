@@ -1,7 +1,7 @@
 """Dynamically registers a get/create tool pair for every category in
 taxonomy.json's custom_categories list — the way a first-time user adds a
 role that doesn't correspond to any of the 6 built-in ones (e.g. their own
-"Meeting Notes"), via `python3 onboard.py`.
+"Meeting Notes"), via `python3 setup/onboard.py`.
 
 Deliberately the simple pattern (list a folder, create a note in it) —
 mirrors get_app_ideas/create_app_idea in builder.py, not the richer

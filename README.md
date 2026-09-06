@@ -60,7 +60,7 @@ interface to your knowledge. Your context stays on your machine or your own
 tailnet; any MCP-compatible client reaches only the context you choose to
 share.
 
-![Vaultex demo](./vaultex.gif)
+![Vaultex demo](./assets/vaultex.gif)
 
 ## How it works
 
@@ -87,13 +87,14 @@ Start at four tools. Grow into the rest only if you want it.
 |---|---|---|
 | Tools | 4 — `search`, `grep`, `read_note`, `write_note` | 31 — the above plus decisions, brainstorms, episodic memory, distillation, coordination, workspaces |
 | Taxonomy | none | `taxonomy.json` |
-| Folder layout | yours, untouched | PARA for a fresh vault, or mapped onto folders you already have |
+| Folder layout | yours, untouched | the `simple` structure for a fresh vault, or mapped onto folders you already have |
 | Writes | explicit path only | routed, named, section-checked, cross-linked |
 
 **Basic** is the "point it at any Markdown folder" path — nothing to
 configure, nothing to learn, and a taxonomy-free vault is a supported
 configuration rather than an error state. **Professional** is the full
-structured surface. `python3 onboard.py` asks which on its first prompt.
+structured surface. `python3 setup/install.py` asks which at step 3, and shows
+the tool count and the literal `VAULTEX_MODE` value under each.
 
 Switching, the derivation rule, and workspaces — [docs/modes.md](docs/modes.md).
 
@@ -102,9 +103,10 @@ Switching, the derivation rule, and workspaces — [docs/modes.md](docs/modes.md
 **Context that persists**
 - **A context layer, not raw filesystem access** — search, read a note, save
   a decision, gather everything about a project.
-- **Folder taxonomy** — map your vault's own folders (or scaffold PARA) once
-  via `onboard.py`; custom categories become their own `get`/`create` tools
-  automatically at startup. → [docs/taxonomy.md](docs/taxonomy.md)
+- **Folder taxonomy** — take the `simple` structure on a fresh vault, or map
+  your own folders, at step 4 of `setup/install.py`; `setup/onboard.py` re-maps them any
+  time. Custom categories become their own `get`/`create` tools automatically
+  at startup. → [docs/taxonomy.md](docs/taxonomy.md)
 - **Workspaces** — name your own project contexts ("Personal", "Work",
   "Sandbox") and pass `workspace=` to the project tools. Add one to
   `taxonomy.json` and it works on the next call, no restart.
@@ -144,8 +146,8 @@ Switching, the derivation rule, and workspaces — [docs/modes.md](docs/modes.md
 
 ```bash
 git clone https://github.com/jysnctcutn/vaultex.git
-python3 install.py   # macOS/Linux 
-python install.py # Windows
+python3 setup/install.py   # macOS/Linux 
+python setup/install.py # Windows
 ```
 
 It points at your vault (or creates one), installs dependencies, sets up
@@ -230,7 +232,7 @@ Deeper reference lives in [`docs/`](docs/):
   variable, what "Running" serves, and the optional semantic-search index
 - **[Available tools](docs/tools.md)** — the full 31-tool table and the
   episodic-memory / distillation / multi-agent coordination lifecycle
-- **[Folder taxonomy](docs/taxonomy.md)** — `onboard.py`, the 9 built-in
+- **[Folder taxonomy](docs/taxonomy.md)** — `setup/onboard.py`, the 9 built-in
   roles, workspaces, custom categories, per-project subfolders
 - **[Architecture](docs/architecture.md)** — how the repo is laid out
   (`server.py`, `core/`, `tools/`)
@@ -249,8 +251,8 @@ Bug reports, feature ideas, and PRs are welcome — see [CONTRIBUTING.md](CONTRI
 for the dev setup, test policy, and PR checklist. Security issues go through
 [SECURITY.md](SECURITY.md) instead of a public issue. Participation is
 governed by the [Code of Conduct](CODE_OF_CONDUCT.md). See
-[GOVERNANCE.md](GOVERNANCE.md) for how decisions get made, and
-[ROADMAP.md](ROADMAP.md) for what's planned (and explicitly not planned)
+[GOVERNANCE.md](docs/GOVERNANCE.md) for how decisions get made, and
+[ROADMAP.md](docs/ROADMAP.md) for what's planned (and explicitly not planned)
 over the next year.
 
 ## License
