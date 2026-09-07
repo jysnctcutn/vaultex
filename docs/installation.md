@@ -64,7 +64,44 @@ Path A (local only) or Path B (self-hosted, reachable remotely).
 | A vault — a folder of markdown notes. [Obsidian](https://obsidian.md) is the common way to manage one, but the server itself just needs the folder, not Obsidian running. | required | required |
 | Python 3 | required | not required (only if you want `setup/onboard.py` to run outside the container — see stage 3) |
 | Docker Desktop | — | required |
-| A free [Tailscale](https://tailscale.com) account | — | required |
+| A free [Tailscale](https://tailscale.com) account, with **HTTPS Certificates** and **Funnel** enabled for your tailnet — see [Tailnet settings for Path B](#tailnet-settings-for-path-b) | — | required |
+
+#### Tailnet settings for Path B
+
+Two things live in your Tailscale account, not in this repo, and Funnel
+cannot work without either. Both are one-time and both are free on a personal
+tailnet. The first is a switch in the admin console; the second is an entry in
+your tailnet policy file, which the installer can walk you through — so you
+can either do them up front or let `setup/install.py` prompt you at the Funnel
+step.
+
+1. **HTTPS Certificates** — [admin console → DNS](https://login.tailscale.com/admin/dns),
+   "HTTPS Certificates" → Enable. Funnel serves public HTTPS, so it has to
+   provision a TLS certificate for `<machine>.<your-tailnet>.ts.net`; without
+   this it has nothing to serve with.
+2. **Funnel** — there is no toggle for this. Funnel is granted by an entry in
+   your tailnet policy file, so browsing the admin console for a checkbox
+   won't turn it up. Three ways to add it, easiest first:
+
+   - **Let the installer do it.** Run `setup/install.py` and stop reading
+     here. When it reaches the Funnel step, `tailscale funnel` opens a web
+     approval flow and prints a link; the installer shows you that link and
+     offers to retry once you've approved it. Approving writes the policy
+     entry for you.
+   - **Admin console shortcut.** [Access Controls](https://login.tailscale.com/admin/acls)
+     → expand the **Funnel** section → **Add Funnel to policy**.
+   - **Edit the policy file yourself.** On the same page, add:
+
+     ```json
+     "nodeAttrs": [
+       {
+         "target": ["autogroup:member"],
+         "attr":   ["funnel"],
+       },
+     ],
+     ```
+
+Neither is needed for Path A — nothing leaves the machine there.
 
 #### Hardware requirements
 
@@ -188,6 +225,9 @@ docker compose up -d --build
 #    internet. Prints your URL, e.g. https://vaultex.<your-tailnet>.ts.net
 #    --bg is required — without it, Funnel turns off as soon as this
 #    command's session ends instead of persisting in the background.
+#    Needs HTTPS Certificates + the funnel nodeAttr on your tailnet first
+#    (see "Tailnet settings for Path B" above) — without them this command
+#    prints an approval link and waits rather than failing.
 docker compose exec tailscale tailscale funnel --bg 8000
 
 # 3. Didn't run stage 3 (setup/onboard.py) locally? Do it here instead — same

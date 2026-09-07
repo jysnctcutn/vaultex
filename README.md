@@ -142,12 +142,13 @@ Switching, the derivation rule, and workspaces — [docs/modes.md](docs/modes.md
 - **No cloud, no subscriptions** — your vault stays on your machine or your
   own tailnet.
 
-## 30-second installation
+## Installation
 
 ```bash
 git clone https://github.com/jysnctcutn/vaultex.git
+cd vaultex
 python3 setup/install.py   # macOS/Linux 
-python setup/install.py # Windows
+python setup/install.py    # Windows
 ```
 
 It points at your vault (or creates one), installs dependencies, sets up
@@ -207,6 +208,11 @@ mobile Connectors) reaches the server through a Tailscale Funnel — bundled as
 a sidecar container in `docker-compose.yml`, so nothing needs installing on
 the host — and authenticates via OAuth 2.1, which `server.py` implements
 itself (`core/oauth/`). No third-party gateway sits in front of it.
+
+Path B needs two one-time settings on your own Tailscale account before
+Funnel will work: **HTTPS Certificates** and the **funnel** nodeAttr. Both
+are free on a personal tailnet — see [Tailnet settings for Path
+B](docs/installation.md#tailnet-settings-for-path-b).
 
 ## Why Vaultex
 

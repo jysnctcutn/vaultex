@@ -60,6 +60,7 @@ import re  # noqa: E402
 import secrets  # noqa: E402
 import shutil  # noqa: E402
 import subprocess  # noqa: E402
+import threading  # noqa: E402
 import time  # noqa: E402
 
 import install_ui as ui  # noqa: E402
@@ -203,6 +204,82 @@ _BIND_MOUNTED_FILES = {
     "oauth_store.db": "",
     ".env": None,  # already written by main(); here only to be repaired
 }
+
+
+def docker_exec_streamed(service: str, cmd: list, timeout: float):
+    """`docker compose exec` that echoes output as it arrives, and returns it.
+
+    Capturing hides exactly what the user has to act on. `tailscale funnel`
+    prints a one-time "enable Funnel for your tailnet" URL and then waits for
+    someone to visit it, so a captured run is a silent stall with nothing on
+    screen and no way to know why.
+
+    Returns (returncode, output); the returncode is None if the timeout hit.
+    """
+    proc = subprocess.Popen(  # noqa: S603
+        ["docker", "compose", "exec", "-T", service, *cmd],  # noqa: S607
+        cwd=BASE_DIR, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL, text=True, bufsize=1,
+    )
+    lines = []
+
+    def pump() -> None:
+        for line in proc.stdout:
+            lines.append(line)
+            print(f"  {line.rstrip()}")
+
+    reader = threading.Thread(target=pump, daemon=True)
+    reader.start()
+    try:
+        code = proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        code = None
+    reader.join(timeout=5)
+    return code, "".join(lines)
+
+
+# Funnel needs a nodeAttr on the tailnet. Without it the CLI prints a
+# one-time link to grant it and then blocks, waiting -- which is a hang from
+# the installer's side unless the link is put in front of the user.
+_FUNNEL_GRANT = re.compile(r"https://login\.tailscale\.com/\S+")
+_FUNNEL_URL = re.compile(r"https://[^\s/]+\.ts\.net")
+
+
+def _enable_funnel() -> str:
+    """Turn Funnel on for port 8000 and return the public URL."""
+    while True:
+        print("\nEnabling Funnel (public HTTPS) on port 8000...")
+        print("  (the first run provisions a TLS certificate — this can take a minute)")
+        code, output = docker_exec_streamed(
+            "tailscale", ["tailscale", "funnel", "--bg", "8000"], timeout=180,
+        )
+
+        found = _FUNNEL_URL.search(output)
+        if code == 0 and found:
+            return found.group(0)
+
+        grant = _FUNNEL_GRANT.search(output)
+        if grant:
+            print("\nFunnel isn't enabled for your tailnet yet. Open this and approve it:")
+            print(f"\n  {grant.group(0)}\n")
+            if ui.ask_yes_no("Approved it? Try again now?"):
+                continue
+            raise SystemExit(
+                "Approve the link above, then re-run this installer — nothing so far is lost."
+            )
+
+        if code is None:
+            raise SystemExit(
+                "\nEnabling Funnel timed out. Check the sidecar with "
+                "`docker compose logs tailscale`, confirm Funnel is enabled for your "
+                "tailnet (admin console -> Access Controls -> nodeAttrs), then re-run "
+                "this installer."
+            )
+        raise SystemExit(
+            f"\nCouldn't enable Funnel (exit {code}). Output was:\n"
+            f"{output.strip() or '(nothing)'}"
+        )
 
 
 def _ensure_bind_mount_files() -> None:
@@ -381,6 +458,18 @@ def install_path_b() -> str:
         "https://login.tailscale.com/admin/settings/keys (reusable is fine — "
         "the sidecar only uses it once, to log in)."
     )
+    # Said here rather than at the Funnel step: both are account settings the
+    # user has to go and change, and finding that out three questions later
+    # means a second trip to the admin console.
+    print("\nTwo one-time tailnet settings are needed for the next step:")
+    print("  - HTTPS Certificates  https://login.tailscale.com/admin/dns")
+    print("  - Funnel              granted by a tailnet policy entry, not a toggle")
+    ui.note(
+        "Both are free on a personal tailnet. Don't go hunting for a Funnel "
+        "checkbox — there isn't one. If it isn't granted yet, this installer "
+        "shows you an approval link when it gets there, and approving it "
+        "writes the policy entry for you."
+    )
     ts_authkey = ui.ask_secret("Paste your Tailscale auth key:")
     if not ts_authkey:
         raise SystemExit("No auth key entered — can't continue remote setup.")
@@ -399,24 +488,7 @@ def install_path_b() -> str:
             "Generate a fresh key from the admin console and re-run this installer."
         )
 
-    print("Enabling Funnel (public HTTPS) on port 8000...")
-    print("  (the first run provisions a TLS certificate — this can take a minute)")
-    try:
-        # Generous: cert provisioning on a brand-new tailnet name is the slow
-        # part, and it only happens once.
-        funnel = docker_exec("tailscale", ["tailscale", "funnel", "--bg", "8000"], timeout=300)
-    except subprocess.TimeoutExpired:
-        raise SystemExit(
-            "\nEnabling Funnel timed out. Check the sidecar with `docker compose logs tailscale`, "
-            "confirm Funnel is enabled for your tailnet in the admin console (Access Controls "
-            "-> nodeAttrs), then re-run this installer."
-        ) from None
-
-    output = funnel.stdout + funnel.stderr
-    match = re.search(r"https://[^\s]+\.ts\.net", output)
-    if not match:
-        raise SystemExit(f"Couldn't parse the Funnel URL from:\n{output.strip() or '(no output)'}")
-    issuer_url = match.group(0)
+    issuer_url = _enable_funnel()
     print(f"Funnel URL: {issuer_url}")
 
     print("\n--- Step 2.3 of 4: authorize password ---")

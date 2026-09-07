@@ -1,6 +1,13 @@
 # Bundled self-host deployment: Vaultex + a Tailscale sidecar, so remote
 # (web/mobile) access needs nothing installed on the host besides Docker.
 #
+# Before the first `docker compose up -d`, enable two things on your tailnet
+# (both one-time, both free on a personal account): HTTPS Certificates on the
+# admin console's DNS page, and the `funnel` nodeAttr in your tailnet policy
+# file under Access Controls (a policy entry, not a toggle).
+# Without them `tailscale funnel` prints an approval link and waits instead of
+# returning. See docs/installation.md#tailnet-settings-for-path-b.
+#
 # One-time setup after `docker compose up -d`:
 #   1. Check the sidecar logged in: `docker compose logs tailscale`
 #   2. Enable Funnel (public HTTPS) for the MCP port, once — the config

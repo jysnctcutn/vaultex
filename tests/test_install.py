@@ -360,3 +360,108 @@ def test_scripted_docker_execs_never_allocate_a_tty(monkeypatch):
     assert seen["cmd"][:4] == ["docker", "compose", "exec", "-T"]
     assert seen["kwargs"]["stdin"] is subprocess.DEVNULL
     assert seen["kwargs"]["timeout"] == 60.0
+
+
+# `tailscale funnel` prints a one-time "enable Funnel for your tailnet" link
+# and then waits for someone to visit it. Captured, that's a silent stall —
+# these pin that the output reaches the screen and the link reaches the user.
+
+
+@pytest.fixture
+def funnel(monkeypatch):
+    """Script what the funnel exec returns: (returncode, output)."""
+    def script(code, output):
+        monkeypatch.setattr(install, "docker_exec_streamed", lambda *a, **k: (code, output))
+    return script
+
+
+_FUNNEL_OK = """Available on the internet:
+
+https://vaultex.tail1a2b3.ts.net/
+|-- proxy http://127.0.0.1:8000
+"""
+
+_FUNNEL_NEEDS_GRANT = """Funnel is not enabled on your tailnet.
+To enable, visit:
+    https://login.tailscale.com/f/funnel?node=abc123
+"""
+
+
+def test_the_funnel_url_is_parsed_from_a_successful_run(funnel):
+    funnel(0, _FUNNEL_OK)
+    assert install._enable_funnel() == "https://vaultex.tail1a2b3.ts.net"
+
+
+def test_the_enable_link_is_shown_and_the_run_is_retried(monkeypatch, capsys):
+    """The link is the whole point: without it the user has nothing to act on."""
+    results = iter([(1, _FUNNEL_NEEDS_GRANT), (0, _FUNNEL_OK)])
+    monkeypatch.setattr(install, "docker_exec_streamed", lambda *a, **k: next(results))
+    monkeypatch.setattr(install.ui, "ask_yes_no", lambda *a, **k: True)
+    assert install._enable_funnel() == "https://vaultex.tail1a2b3.ts.net"
+    assert "https://login.tailscale.com/f/funnel?node=abc123" in capsys.readouterr().out
+
+
+def test_declining_the_retry_exits_without_losing_the_install(funnel, monkeypatch):
+    funnel(1, _FUNNEL_NEEDS_GRANT)
+    monkeypatch.setattr(install.ui, "ask_yes_no", lambda *a, **k: False)
+    with pytest.raises(SystemExit, match="nothing so far is lost"):
+        install._enable_funnel()
+
+
+def test_a_funnel_timeout_says_where_to_look(funnel):
+    funnel(None, "")
+    with pytest.raises(SystemExit, match="docker compose logs tailscale"):
+        install._enable_funnel()
+
+
+def test_an_unrecognised_funnel_failure_surfaces_its_output(funnel):
+    funnel(1, "flag provided but not defined: -bg")
+    with pytest.raises(SystemExit, match="flag provided but not defined"):
+        install._enable_funnel()
+
+
+def test_a_zero_exit_with_no_url_is_not_treated_as_success(funnel):
+    funnel(0, "nothing useful here")
+    with pytest.raises(SystemExit, match="Couldn't enable Funnel"):
+        install._enable_funnel()
+
+
+class _FakeProc:
+    def __init__(self, lines, code=0):
+        self.stdout = iter(lines)
+        self._code = code
+        self.killed = False
+
+    def wait(self, timeout=None):
+        if self._code is None:
+            raise subprocess.TimeoutExpired("docker", timeout)
+        return self._code
+
+    def kill(self):
+        self.killed = True
+
+
+def test_a_streamed_exec_echoes_output_and_returns_it(monkeypatch, capsys):
+    seen = {}
+
+    def fake_popen(cmd, **kwargs):
+        seen["cmd"] = cmd
+        seen["kwargs"] = kwargs
+        return _FakeProc(["provisioning cert\n", "https://vaultex.tail1a2b3.ts.net/\n"])
+
+    monkeypatch.setattr(install.subprocess, "Popen", fake_popen)
+    code, output = install.docker_exec_streamed("tailscale", ["tailscale", "funnel"], timeout=5)
+
+    assert code == 0
+    assert "provisioning cert" in output
+    assert "provisioning cert" in capsys.readouterr().out  # the user sees it live
+    assert seen["cmd"][:4] == ["docker", "compose", "exec", "-T"]
+    assert seen["kwargs"]["stdin"] is subprocess.DEVNULL
+
+
+def test_a_streamed_exec_kills_the_container_command_on_timeout(monkeypatch):
+    proc = _FakeProc([], code=None)
+    monkeypatch.setattr(install.subprocess, "Popen", lambda cmd, **kw: proc)
+    code, _ = install.docker_exec_streamed("tailscale", ["tailscale", "funnel"], timeout=0.1)
+    assert code is None
+    assert proc.killed
