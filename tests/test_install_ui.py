@@ -265,6 +265,31 @@ def key_fd():
         os.close(write_fd)
 
 
+@pytest.fixture
+def masked_fd():
+    """The same pipe, driving _read_masked instead of the key decoder."""
+    import os
+
+    read_fd, write_fd = os.pipe()
+    try:
+        yield (lambda data: os.write(write_fd, data)), lambda: install_ui._read_masked(read_fd)
+    finally:
+        os.close(read_fd)
+        os.close(write_fd)
+
+
+@pytest.fixture
+def masked_fd_closed():
+    import os
+
+    read_fd, write_fd = os.pipe()
+    os.close(write_fd)
+    try:
+        yield lambda: install_ui._read_masked(read_fd)
+    finally:
+        os.close(read_fd)
+
+
 @pytest.mark.parametrize(("sent", "expected"), [
     (b"\x1b[A", "up"),
     (b"\x1b[B", "down"),
@@ -313,3 +338,101 @@ def test_a_closed_stdin_raises_instead_of_spinning_the_panel():
             install_ui._read_fd_key(read_fd)
     finally:
         os.close(read_fd)
+
+
+# ask_secret: echo-off input reads as a hang, because nothing appears as you
+# type. These pin the parts that make it survivable.
+
+
+def test_a_secret_prompt_says_the_input_is_hidden(monkeypatch, capsys):
+    monkeypatch.setattr(install_ui.getpass, "getpass", lambda prompt="": "tskey-abc")
+    monkeypatch.setattr(install_ui, "_flush_input", lambda: None)
+    assert install_ui.ask_secret("Paste your Tailscale auth key:") == "tskey-abc"
+    assert "hidden" in capsys.readouterr().out
+
+
+def test_a_secret_is_never_echoed_back(monkeypatch, capsys):
+    monkeypatch.setattr(install_ui.getpass, "getpass", lambda prompt="": "  tskey-secret  ")
+    monkeypatch.setattr(install_ui, "_flush_input", lambda: None)
+    assert install_ui.ask_secret("Key:") == "tskey-secret"
+    assert "tskey-secret" not in capsys.readouterr().out
+
+
+def test_a_pipe_fails_loudly_instead_of_blocking_on_a_secret(monkeypatch):
+    """getpass falls back to reading sys.stdin when there's no tty; on a pipe
+    that either blocks or hits EOF, and EOF must not look like an empty key."""
+    def eof(prompt=""):
+        raise EOFError
+
+    monkeypatch.setattr(install_ui.getpass, "getpass", eof)
+    monkeypatch.setattr(install_ui, "_flush_input", lambda: None)
+    with pytest.raises(SystemExit, match="No terminal available"):
+        install_ui.ask_secret("Key:")
+
+
+def test_type_ahead_is_dropped_before_a_secret_prompt(monkeypatch):
+    """An extra Enter left over from confirming the previous panel would
+    otherwise be read as an empty answer."""
+    called = []
+    monkeypatch.setattr(install_ui, "_flush_input", lambda: called.append(True))
+    monkeypatch.setattr(install_ui.getpass, "getpass", lambda prompt="": "k")
+    install_ui.ask_secret("Key:")
+    assert called == [True]
+
+
+# _read_masked is the interactive half of ask_secret: one * per character, and
+# the key itself never reaching the screen. Driven over a pipe, like the key
+# reader above.
+
+
+def test_masked_input_returns_what_was_typed(masked_fd):
+    feed, read_line = masked_fd
+    feed(b"tskey-abc123\r")
+    assert read_line() == "tskey-abc123"
+
+
+def test_masked_input_prints_one_star_per_character(masked_fd, capsys):
+    feed, read_line = masked_fd
+    feed(b"abc\r")
+    read_line()
+    assert capsys.readouterr().out.startswith("***")
+
+
+def test_the_secret_never_reaches_the_screen(masked_fd, capsys):
+    feed, read_line = masked_fd
+    feed(b"tskey-secret\r")
+    assert read_line() == "tskey-secret"
+    assert "tskey-secret" not in capsys.readouterr().out
+
+
+def test_backspace_erases_a_character_and_its_star(masked_fd, capsys):
+    feed, read_line = masked_fd
+    feed(b"abx\x7fc\r")
+    assert read_line() == "abc"
+    assert capsys.readouterr().out.count("\b \b") == 1
+
+
+def test_ctrl_u_clears_the_line(masked_fd):
+    feed, read_line = masked_fd
+    feed(b"wrong\x15right\r")
+    assert read_line() == "right"
+
+
+def test_an_arrow_key_is_not_swallowed_into_the_secret(masked_fd):
+    """Raw mode means an arrow arrives as ESC [ D; without consuming the tail
+    the `[` and `D` would land in the key."""
+    feed, read_line = masked_fd
+    feed(b"ab\x1b[Dc\r")
+    assert read_line() == "abc"
+
+
+def test_ctrl_c_still_cancels_a_secret_prompt(masked_fd):
+    feed, read_line = masked_fd
+    feed(b"ab\x03")
+    with pytest.raises(KeyboardInterrupt):
+        read_line()
+
+
+def test_a_closed_stdin_raises_rather_than_returning_an_empty_secret(masked_fd_closed):
+    with pytest.raises(EOFError):
+        masked_fd_closed()

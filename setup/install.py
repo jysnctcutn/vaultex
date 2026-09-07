@@ -54,13 +54,13 @@ if sys.version_info < (3, 10):  # noqa: UP036
 # the core.presets import below.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import getpass  # noqa: E402
 import json  # noqa: E402
 import os  # noqa: E402
 import re  # noqa: E402
 import secrets  # noqa: E402
 import shutil  # noqa: E402
 import subprocess  # noqa: E402
+import time  # noqa: E402
 
 import install_ui as ui  # noqa: E402
 from core.presets import (  # noqa: E402
@@ -161,11 +161,102 @@ def _docker_ready() -> bool:
     if shutil.which("docker") is None:
         return False
     try:
-        # Fixed command, no shell, no attacker-controlled input.
-        subprocess.run(["docker", "info"], check=True, capture_output=True)  # noqa: S603, S607
+        # Fixed command, no shell, no attacker-controlled input. The timeout
+        # covers an installed-but-wedged daemon, which otherwise leaves the
+        # installer sitting on a silent `docker info` with nothing on screen.
+        subprocess.run(["docker", "info"], check=True, capture_output=True, timeout=30)  # noqa: S603, S607
         return True
-    except (subprocess.CalledProcessError, OSError):
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
         return False
+
+
+def docker_exec(service: str, cmd: list, timeout: float = 60.0) -> subprocess.CompletedProcess:
+    """`docker compose exec` as a script runs it, not as a person does.
+
+    `-T` is what makes this return: compose allocates a pseudo-TTY by default
+    and attaches the installer's stdin to the exec session, so a scripted
+    `docker compose exec tailscale tailscale status` hands the terminal to a
+    command nobody is typing at and simply sits there. Closing stdin and
+    capping the wall clock cover the rest -- a hung container surfaces as a
+    message instead of a dead prompt.
+    """
+    return subprocess.run(  # noqa: S603
+        ["docker", "compose", "exec", "-T", service, *cmd],  # noqa: S607
+        cwd=BASE_DIR, capture_output=True, text=True,
+        stdin=subprocess.DEVNULL, timeout=timeout,
+    )
+
+
+# docker-compose.yml bind-mounts each of these from the repo root, and every
+# one is gitignored -- so in a fresh clone none of them exist. Docker creates
+# a missing bind-mount source as a *directory*, and the container then dies on
+# `IsADirectoryError: [Errno 21] Is a directory: '/app/taxonomy.json'`. The
+# installer writes taxonomy.json in Step 4, long after compose has already
+# come up in Step 2, so seeding them here is what closes that window.
+#
+# Empty is the right seed for the two SQLite files (a zero-length file is a
+# valid new database), and empty roles for taxonomy.json reads exactly like a
+# missing one to core.taxonomy and core.mode.
+_BIND_MOUNTED_FILES = {
+    "taxonomy.json": '{\n  "roles": {},\n  "custom_categories": [],\n  "project_subfolders": {}\n}\n',
+    "vault_embeddings.db": "",
+    "oauth_store.db": "",
+    ".env": None,  # already written by main(); here only to be repaired
+}
+
+
+def _ensure_bind_mount_files() -> None:
+    """Make every bind-mount source exist as a file before compose runs."""
+    for name, seed in _BIND_MOUNTED_FILES.items():
+        path = BASE_DIR / name
+        if path.is_dir():
+            try:
+                # Only ever empty: docker made it, nothing wrote into it.
+                path.rmdir()
+            except OSError:
+                raise SystemExit(
+                    f"\n{path} is a directory, but Vaultex needs it to be a file. "
+                    "Docker creates one when a bind-mount source is missing. Run "
+                    "`docker compose down`, delete that directory, then re-run this "
+                    "installer."
+                ) from None
+        if seed is not None and not path.exists():
+            path.write_text(seed, encoding="utf-8")
+
+
+def _tailscale_status(timeout: float = 120.0) -> str:
+    """Wait for the sidecar to finish coming up, then return its status text.
+
+    `docker compose up -d` returns when the container has *started*, not when
+    tailscaled has authenticated with the auth key -- several seconds later,
+    longer on a cold volume. Asking immediately gets "Tailscale is stopped"
+    from a daemon that is seconds away from being fine, so this polls.
+    """
+    deadline = time.monotonic() + timeout
+    last = ""
+    while True:
+        try:
+            result = docker_exec("tailscale", ["tailscale", "status"], timeout=30)
+        except subprocess.TimeoutExpired:
+            result, last = None, "tailscale status did not respond"
+        else:
+            last = (result.stdout + result.stderr).strip()
+            low = last.lower()
+            # A definitive answer either way ends the wait: a healthy status,
+            # or a login failure the caller turns into a fix-your-key message.
+            if result.returncode == 0 and last:
+                return last
+            if "logged out" in low or "invalid key" in low or "expired" in low:
+                return last
+
+        if time.monotonic() >= deadline:
+            raise SystemExit(
+                "\nThe Tailscale sidecar never came up. Check what it says with:\n"
+                "  docker compose logs tailscale\n"
+                f"\nLast status was:\n{last or '(no output)'}"
+            )
+        print("  ...still starting")
+        time.sleep(3)
 
 
 def _in_vault(vault: Path, command: str, access: str) -> str:
@@ -290,34 +381,41 @@ def install_path_b() -> str:
         "https://login.tailscale.com/admin/settings/keys (reusable is fine — "
         "the sidecar only uses it once, to log in)."
     )
-    ts_authkey = getpass.getpass("Paste your Tailscale auth key: ").strip()
+    ts_authkey = ui.ask_secret("Paste your Tailscale auth key:")
     if not ts_authkey:
         raise SystemExit("No auth key entered — can't continue remote setup.")
     _upsert_env(ENV_PATH, "TS_AUTHKEY", ts_authkey)
 
     print("\n--- Bringing the stack up (bearer-token-only mode for now) ---")
+    _ensure_bind_mount_files()
     run(["docker", "compose", "up", "-d", "--build"], cwd=BASE_DIR)
 
     print("\nChecking the Tailscale sidecar logged in...")
-    # Fixed command, no shell, no attacker-controlled input.
-    status = subprocess.run(
-        ["docker", "compose", "exec", "tailscale", "tailscale", "status"],  # noqa: S603, S607
-        cwd=BASE_DIR, capture_output=True, text=True,
-    )
-    if "logged out" in status.stdout.lower() or "invalid key" in (status.stdout + status.stderr).lower():
+    status = _tailscale_status()
+    low = status.lower()
+    if "logged out" in low or "invalid key" in low or "expired" in low:
         raise SystemExit(
             "Tailscale couldn't log in with that auth key (it may be expired or already used). "
             "Generate a fresh key from the admin console and re-run this installer."
         )
 
     print("Enabling Funnel (public HTTPS) on port 8000...")
-    funnel = run(
-        ["docker", "compose", "exec", "tailscale", "tailscale", "funnel", "--bg", "8000"],
-        cwd=BASE_DIR, capture_output=True, text=True,
-    )
-    match = re.search(r"https://[^\s]+\.ts\.net", funnel.stdout)
+    print("  (the first run provisions a TLS certificate — this can take a minute)")
+    try:
+        # Generous: cert provisioning on a brand-new tailnet name is the slow
+        # part, and it only happens once.
+        funnel = docker_exec("tailscale", ["tailscale", "funnel", "--bg", "8000"], timeout=300)
+    except subprocess.TimeoutExpired:
+        raise SystemExit(
+            "\nEnabling Funnel timed out. Check the sidecar with `docker compose logs tailscale`, "
+            "confirm Funnel is enabled for your tailnet in the admin console (Access Controls "
+            "-> nodeAttrs), then re-run this installer."
+        ) from None
+
+    output = funnel.stdout + funnel.stderr
+    match = re.search(r"https://[^\s]+\.ts\.net", output)
     if not match:
-        raise SystemExit(f"Couldn't parse the Funnel URL from:\n{funnel.stdout}")
+        raise SystemExit(f"Couldn't parse the Funnel URL from:\n{output.strip() or '(no output)'}")
     issuer_url = match.group(0)
     print(f"Funnel URL: {issuer_url}")
 
@@ -328,8 +426,8 @@ def install_path_b() -> str:
         "once each time a new client (e.g. Claude.ai) is authorized."
     )
     while True:
-        pw1 = getpass.getpass("Authorize password: ")
-        pw2 = getpass.getpass("Confirm: ")
+        pw1 = ui.ask_secret("Authorize password:", hint="Type it, then press Enter.")
+        pw2 = ui.ask_secret("Confirm:", hint="Type it again, then press Enter.")
         if pw1 and pw1 == pw2:
             break
         print("Didn't match (or was empty) — try again.")
@@ -476,6 +574,20 @@ def step_layout(vault: Path, access: str) -> str:
     return choice
 
 
+def _restart_stack(access: str) -> None:
+    """Re-up the stack so Steps 3-4 actually reach the container.
+
+    On Path B the stack comes up in Step 2, but the container reads .env only
+    at start and taxonomy.json only at import -- so the mode and layout chosen
+    afterwards would leave a Professional install running as Basic until
+    someone restarted it by hand.
+    """
+    if access != REMOTE:
+        return
+    print("\n--- Restarting so the container picks up mode and layout ---")
+    run(["docker", "compose", "up", "-d", "--build"], cwd=BASE_DIR)
+
+
 # --- Semantic index ---
 
 def step_index(vault: Path, access: str) -> None:
@@ -484,7 +596,7 @@ def step_index(vault: Path, access: str) -> None:
         return
     print("\n--- Building the semantic-search index (this can take a minute or two) ---")
     if access == REMOTE:
-        run(["docker", "compose", "exec", "vaultex", "python3", "index_vault.py"], cwd=BASE_DIR)
+        run(["docker", "compose", "exec", "-T", "vaultex", "python3", "index_vault.py"], cwd=BASE_DIR)
     else:
         run([str(venv_python(VENV_DIR)), "index_vault.py"], cwd=BASE_DIR)
 
@@ -504,6 +616,13 @@ def _later_block(vault: Path, access: str, mode: str) -> None:
         print(f"                             {_in_vault(vault, 'setup/onboard.py', access)}")
     if access == LOCAL:
         print("  - Switch to remote access  re-run setup/install.py and choose remote access")
+
+
+def _finish(vault: Path, access: str, mode: str) -> None:
+    """The tail every path through the wizard ends on."""
+    _restart_stack(access)
+    step_index(vault, access)
+    step_summary(vault, access, mode)
 
 
 def step_summary(vault: Path, access: str, mode: str) -> None:
@@ -571,8 +690,7 @@ def main() -> None:
         # layout to choose. Saying so beats a fourth screen that does nothing.
         print("\nBasic mode is ready — search, grep, read_note, write_note.")
         print("Step 4 (layout) doesn't apply: Basic imposes no folder structure.")
-        step_index(vault, access)
-        step_summary(vault, access, mode)
+        _finish(vault, access, mode)
         return
 
     while True:
@@ -583,13 +701,11 @@ def main() -> None:
         _upsert_env(ENV_PATH, "VAULTEX_MODE", mode)
         ui.step_done("Mode", mode)
         if mode == BASIC:
-            step_index(vault, access)
-            step_summary(vault, access, mode)
+            _finish(vault, access, mode)
             return
     ui.step_done("Layout", preset)
 
-    step_index(vault, access)
-    step_summary(vault, access, mode)
+    _finish(vault, access, mode)
 
 
 if __name__ == "__main__":

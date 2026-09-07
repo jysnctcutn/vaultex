@@ -13,6 +13,7 @@ already removed from onboard.py.
 """
 
 import json
+import subprocess
 
 import pytest
 
@@ -270,3 +271,92 @@ def test_the_version_guard_runs_before_any_non_stdlib_import():
         )
     )
     assert guard_line < first_local_import
+
+
+# docker-compose.yml bind-mounts taxonomy.json, the two SQLite files and .env
+# from the repo root, and all four are gitignored — so a fresh clone has none
+# of them. Docker creates a missing bind-mount source as a directory, and the
+# container dies on `IsADirectoryError: '/app/taxonomy.json'`.
+
+
+@pytest.fixture
+def repo_root(monkeypatch, tmp_path):
+    monkeypatch.setattr(install, "BASE_DIR", tmp_path)
+    (tmp_path / ".env").write_text("VAULTEX_PATH=/vault\n", encoding="utf-8")
+    return tmp_path
+
+
+def test_bind_mount_sources_are_created_before_compose_runs(repo_root):
+    install._ensure_bind_mount_files()
+    for name in ("taxonomy.json", "vault_embeddings.db", "oauth_store.db"):
+        assert (repo_root / name).is_file(), name
+
+
+def test_the_seeded_taxonomy_is_valid_json_the_server_can_load(repo_root):
+    install._ensure_bind_mount_files()
+    data = json.loads((repo_root / "taxonomy.json").read_text(encoding="utf-8"))
+    # Empty roles must read exactly like a missing file, or core.mode would
+    # infer professional from a file the installer wrote itself.
+    assert not any(data["roles"].values())
+    assert data["custom_categories"] == []
+
+
+def test_a_directory_left_by_docker_is_repaired(repo_root):
+    (repo_root / "taxonomy.json").mkdir()
+    install._ensure_bind_mount_files()
+    assert (repo_root / "taxonomy.json").is_file()
+
+
+def test_a_non_empty_directory_stops_with_an_actionable_message(repo_root):
+    (repo_root / "taxonomy.json").mkdir()
+    (repo_root / "taxonomy.json" / "stray").write_text("x", encoding="utf-8")
+    with pytest.raises(SystemExit, match="docker compose down"):
+        install._ensure_bind_mount_files()
+
+
+def test_existing_files_are_left_alone(repo_root):
+    (repo_root / "taxonomy.json").write_text('{"roles": {"decisions": "Notes"}}', encoding="utf-8")
+    install._ensure_bind_mount_files()
+    assert json.loads((repo_root / "taxonomy.json").read_text())["roles"] == {"decisions": "Notes"}
+
+
+def test_env_is_repaired_but_never_seeded(repo_root):
+    """main() writes .env from .env.example; this only undoes a directory."""
+    (repo_root / ".env").unlink()
+    install._ensure_bind_mount_files()
+    assert not (repo_root / ".env").exists()
+
+
+# The container reads .env at start and taxonomy.json at import, so the mode
+# and layout chosen in Steps 3-4 need a re-up to reach a Path B stack.
+
+
+def test_a_remote_install_restarts_the_stack_after_the_later_steps(monkeypatch):
+    calls = []
+    monkeypatch.setattr(install, "run", lambda cmd, **kw: calls.append(cmd))
+    install._restart_stack(install.REMOTE)
+    assert calls == [["docker", "compose", "up", "-d", "--build"]]
+
+
+def test_a_local_install_has_no_stack_to_restart(monkeypatch):
+    calls = []
+    monkeypatch.setattr(install, "run", lambda cmd, **kw: calls.append(cmd))
+    install._restart_stack(install.LOCAL)
+    assert calls == []
+
+
+def test_scripted_docker_execs_never_allocate_a_tty(monkeypatch):
+    """Without -T, compose hands the installer's stdin to the exec session and
+    a scripted `tailscale status` just sits there."""
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        seen["kwargs"] = kwargs
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(install.subprocess, "run", fake_run)
+    install.docker_exec("tailscale", ["tailscale", "status"])
+    assert seen["cmd"][:4] == ["docker", "compose", "exec", "-T"]
+    assert seen["kwargs"]["stdin"] is subprocess.DEVNULL
+    assert seen["kwargs"]["timeout"] == 60.0

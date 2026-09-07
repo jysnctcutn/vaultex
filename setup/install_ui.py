@@ -20,6 +20,7 @@ Constraints come from the Easy Install & Onboarding UX decision §9.5:
 """
 
 import contextlib
+import getpass
 import os
 import sys
 import textwrap
@@ -335,6 +336,117 @@ def _select_plain(
         if raw.isdigit() and 1 <= int(raw) <= len(options):
             return options[int(raw) - 1].value
         print("Not a valid choice — try again.")
+
+
+def _flush_input() -> None:
+    """Drop anything typed before a prompt appeared.
+
+    A panel confirmed with an extra Enter leaves that Enter in the terminal's
+    queue, and the next prompt would read it as an empty answer.
+    """
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            while msvcrt.kbhit():
+                msvcrt.getwch()
+            return
+        import termios
+
+        termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
+    except Exception:  # noqa: BLE001, S110 - nothing to flush is not a failure
+        pass
+
+
+_NO_TTY = (
+    "\nNo terminal available to read that secret. Run the installer directly "
+    "in a terminal, or set the value in .env and re-run."
+)
+
+
+def _read_masked(fd: int) -> str:
+    """Read a line in raw mode, echoing one `*` per character.
+
+    getpass shows nothing at all, so a pasted auth key gives no sign it
+    landed. Masking is the middle ground: visible progress, nothing readable
+    on screen or in scrollback. The secret itself is never written anywhere --
+    only asterisks are.
+    """
+    import codecs
+
+    decoder = codecs.getincrementaldecoder("utf-8")("replace")
+    chars: list = []
+
+    while True:
+        data = os.read(fd, 1)
+        if not data:
+            if not chars:
+                raise EOFError
+            break
+        byte = data[0]
+
+        if byte == 3:  # Ctrl-C: raw mode killed ISIG, so raise it ourselves
+            raise KeyboardInterrupt
+        if byte in (13, 10):  # Enter
+            break
+        if byte == 4:  # Ctrl-D
+            if not chars:
+                raise EOFError
+            break
+        if byte in (8, 127):  # Backspace / Delete
+            if chars:
+                chars.pop()
+                sys.stdout.write("\b \b")
+                sys.stdout.flush()
+            continue
+        if byte == 21:  # Ctrl-U clears the line
+            sys.stdout.write("\b \b" * len(chars))
+            sys.stdout.flush()
+            chars.clear()
+            continue
+        if byte == 27:  # an arrow key, or a paste bracket -- not key material
+            _read_escape_tail(fd)
+            continue
+        if byte < 32:  # any other control byte: not part of a key
+            continue
+
+        char = decoder.decode(data)
+        if not char:  # a continuation byte; the character isn't complete yet
+            continue
+        chars.append(char)
+        sys.stdout.write("*" * len(char))
+        sys.stdout.flush()
+
+    sys.stdout.write("\r\n")
+    sys.stdout.flush()
+    return "".join(chars)
+
+
+def ask_secret(prompt: str, hint: str = "") -> str:
+    """Read a secret without ever echoing or printing it back."""
+    _flush_input()
+    print(f"\n{prompt}")
+    tail = hint or "Paste it, then press Enter."
+
+    if _interactive():
+        note(f"Masked as you type — one * per character. {tail}")
+        with _raw_mode() as fd:
+            if fd is not None:
+                sys.stdout.write("  > ")
+                sys.stdout.flush()
+                try:
+                    return _read_masked(fd).strip()
+                except EOFError:
+                    raise SystemExit(_NO_TTY) from None
+
+    # No tty to put in raw mode: getpass still reads, it just can't mask.
+    note(f"Input is hidden — nothing appears as you type. {tail}")
+    try:
+        return getpass.getpass("  > ").strip()
+    except EOFError:
+        # A pipe can't answer a secret prompt; blocking forever on one is the
+        # failure mode this replaces.
+        raise SystemExit(_NO_TTY) from None
 
 
 def ask_yes_no(prompt: str, default: bool = True) -> bool:
