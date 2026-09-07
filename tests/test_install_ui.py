@@ -240,3 +240,76 @@ def test_the_panel_is_erased_so_a_collapsed_line_can_replace_it(keys, capsys):
     keys("enter")
     install_ui.select("Mode", "Step 3 of 4", OPTIONS)
     assert "\x1b[0J" in capsys.readouterr().out
+
+
+# The two Xubuntu bugs, both from the same root cause: an arrow's ESC was read
+# through sys.stdin, whose text wrapper swallowed the "[A"/"[B" tail into its
+# own buffer. Reading the fd is what keeps a sequence whole, so these drive
+# _read_fd_key over a real pipe.
+
+
+@pytest.fixture
+def key_fd():
+    """A pipe standing in for the terminal; yields (feed, read_one)."""
+    import os
+
+    read_fd, write_fd = os.pipe()
+
+    def feed(data):
+        os.write(write_fd, data)
+
+    try:
+        yield feed, lambda: install_ui._read_fd_key(read_fd)
+    finally:
+        os.close(read_fd)
+        os.close(write_fd)
+
+
+@pytest.mark.parametrize(("sent", "expected"), [
+    (b"\x1b[A", "up"),
+    (b"\x1b[B", "down"),
+    (b"\x1bOA", "up"),      # application-cursor mode (DECCKM)
+    (b"\x1bOB", "down"),
+    (b"\r", "enter"),
+    (b"b", "b"),
+])
+def test_a_whole_escape_sequence_reads_as_one_key(key_fd, sent, expected):
+    feed, read_one = key_fd
+    feed(sent)
+    assert read_one() == expected
+
+
+def test_the_down_arrow_is_never_mistaken_for_the_back_key(key_fd):
+    """ESC [ B losing its tail degrades to a literal `b` -- which is "go back
+    a step", so arrowing down to remote access returned to Step 1."""
+    feed, read_one = key_fd
+    feed(b"\x1b[B")
+    assert read_one() == "down"
+
+
+def test_one_arrow_press_consumes_exactly_one_arrow(key_fd):
+    """The tail read must stop at the sequence's final byte, or a burst of
+    presses is swallowed and the cursor appears to miss keys."""
+    feed, read_one = key_fd
+    feed(b"\x1b[B\x1b[B\r")
+    assert [read_one() for _ in range(3)] == ["down", "down", "enter"]
+
+
+def test_a_bare_escape_does_not_block_waiting_for_a_tail(key_fd):
+    feed, read_one = key_fd
+    feed(b"\x1b")
+    assert read_one() == "escape"
+
+
+def test_a_closed_stdin_raises_instead_of_spinning_the_panel():
+    """os.read returning nothing means EOF; without this select() would redraw
+    forever against a dead fd."""
+    import os
+
+    read_fd, write_fd = os.pipe()
+    os.close(write_fd)
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            install_ui._read_fd_key(read_fd)
+    finally:
+        os.close(read_fd)

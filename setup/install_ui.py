@@ -19,6 +19,7 @@ Constraints come from the Easy Install & Onboarding UX decision §9.5:
   - Numbered-prompt fallback whenever stdin or stdout isn't a TTY.
 """
 
+import contextlib
 import os
 import sys
 import textwrap
@@ -118,13 +119,22 @@ def _panel(title: str, step: str, options: list[Option], cursor: int, footer: st
 
 # --- key reading -------------------------------------------------------------
 
-# Escape sequence tails, once the leading ESC has been consumed.
-_ARROWS = {"[A": "up", "[B": "down"}
+# Escape sequence tails, once the leading ESC has been consumed. A terminal in
+# application-cursor mode (DECCKM, which xterm and libvte terminals switch on)
+# sends ESC O A for Up instead of ESC [ A, so both forms map here.
+_ARROWS = {"[A": "up", "[B": "down", "OA": "up", "OB": "down"}
+
+# Set while select() holds the terminal in raw mode for a whole panel. Holding
+# it across redraws is the point: with ICANON back on between keypresses, a key
+# pressed while the panel repaints lands in the terminal's line buffer and
+# isn't delivered until Enter -- which is what made arrow keys feel like they
+# needed several presses to register.
+_RAW_FD = None
 
 
 def _decode(ch: str, tail: str = "") -> str:
     """One keypress -> a name. Pure, so the mapping is testable without a tty;
-    `tail` is the two characters following an ESC, empty for a bare Escape.
+    `tail` is the characters following an ESC, empty for a bare Escape.
 
     Raw mode turns off ISIG, so the SIGINT a user expects from Ctrl-C never
     fires -- raising it here is what keeps Ctrl-C working at all.
@@ -132,8 +142,84 @@ def _decode(ch: str, tail: str = "") -> str:
     if ch == "\x03":
         raise KeyboardInterrupt
     if ch == "\x1b":
-        return _ARROWS.get(tail, "escape" if not tail else "")
+        return _ARROWS.get(tail[:2], "escape" if not tail else "")
     return {"\r": "enter", "\n": "enter"}.get(ch, ch.lower())
+
+
+@contextlib.contextmanager
+def _raw_mode():
+    """Hold the terminal in raw mode for as long as a panel is on screen.
+
+    Yields the fd, or None when raw mode isn't available (Windows, no tty, a
+    terminal that refuses it) -- callers still work, they just get cooked
+    reads and must keep printing plain newlines.
+    """
+    global _RAW_FD
+    if os.name == "nt":
+        yield None
+        return
+
+    import termios
+    import tty
+
+    try:
+        fd = sys.stdin.fileno()
+        saved = termios.tcgetattr(fd)
+    except Exception:  # noqa: BLE001 - not a real tty; the caller degrades
+        yield None
+        return
+
+    previous = _RAW_FD
+    try:
+        tty.setraw(fd)
+        _RAW_FD = fd
+        yield fd
+    finally:
+        # Before anything can raise: a wizard that exits with ICANON and ECHO
+        # still off leaves the user's shell unusable.
+        _RAW_FD = previous
+        termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+
+
+def _read_escape_tail(fd: int, timeout: float = 0.15) -> str:
+    """The bytes after an ESC, read one at a time so a bare Escape doesn't
+    block and a longer sequence isn't left half-consumed.
+
+    Getting this right is the whole ball game: a truncated ESC [ B degrades
+    into a literal `b`, and `b` is the key that goes back a step -- which is
+    why arrowing down to remote access bounced the wizard back to Step 1.
+    """
+    import select as _select
+
+    tail = ""
+    while len(tail) < 8:
+        if not _select.select([fd], [], [], timeout)[0]:
+            break
+        chunk = os.read(fd, 1)
+        if not chunk:
+            break
+        tail += chunk.decode("utf-8", "replace")
+        # CSI and SS3 sequences end on a byte in @-~; stopping there keeps the
+        # next keypress out of this one's tail.
+        if len(tail) >= 2 and "@" <= tail[-1] <= "~":
+            break
+        timeout = 0.02  # the rest of a sequence arrives in the same burst
+    return tail
+
+
+def _read_fd_key(fd: int) -> str:
+    """Read the fd directly rather than through sys.stdin.
+
+    sys.stdin.read(1) pulls every byte the terminal delivered into the text
+    wrapper's own buffer, so a following select() on the fd sees nothing and
+    an arrow press is reported as a bare Escape, with `[` and `A`/`B` then
+    surfacing as two more keypresses of their own.
+    """
+    data = os.read(fd, 1)
+    if not data:
+        raise KeyboardInterrupt  # stdin closed; nothing left to drive the panel
+    ch = data.decode("utf-8", "replace")
+    return _decode(ch, _read_escape_tail(fd) if ch == "\x1b" else "")
 
 
 def _read_key() -> str:
@@ -145,28 +231,11 @@ def _read_key() -> str:
             return {"H": "up", "P": "down"}.get(msvcrt.getwch(), "")
         return _decode(ch)
 
-    import termios
-    import tty
+    if _RAW_FD is not None:
+        return _read_fd_key(_RAW_FD)
 
-    fd = sys.stdin.fileno()
-    saved = termios.tcgetattr(fd)
-    try:
-        tty.setraw(fd)
-        ch = sys.stdin.read(1)
-        tail = ""
-        if ch == "\x1b":
-            # Tell an arrow sequence from a bare Escape without blocking on
-            # the latter, which sends nothing more.
-            import select as _select
-
-            if _select.select([sys.stdin], [], [], 0.05)[0]:
-                tail = sys.stdin.read(2)
-    finally:
-        # Before anything can raise: a wizard that exits with ICANON and ECHO
-        # still off leaves the user's shell unusable.
-        termios.tcsetattr(fd, termios.TCSADRAIN, saved)
-
-    return _decode(ch, tail)
+    with _raw_mode() as fd:
+        return _read_fd_key(fd if fd is not None else sys.stdin.fileno())
 
 
 # --- public surface ----------------------------------------------------------
@@ -206,28 +275,34 @@ def select(
     hint = "  up/down move . enter select" + (" . b back" if allow_back else "")
     drawn = 0
 
-    while True:
-        lines = _panel(title, step, options, cursor, footer) + [f"{_DIM}{hint}{_RESET}"]
-        if drawn:
-            sys.stdout.write(f"{_ESC}{drawn}A")
-        sys.stdout.write("".join(f"{_ESC}2K{line}\n" for line in lines))
+    # One raw-mode session for the whole panel rather than one per keypress:
+    # see _RAW_FD. Raw mode also drops the ONLCR that turns \n into a carriage
+    # return, so every line the panel draws has to carry its own \r.
+    with _raw_mode() as raw_fd:
+        newline = "\r\n" if raw_fd is not None else "\n"
+        while True:
+            lines = _panel(title, step, options, cursor, footer) + [f"{_DIM}{hint}{_RESET}"]
+            if drawn:
+                sys.stdout.write(f"{_ESC}{drawn}A")
+            sys.stdout.write("".join(f"{_ESC}2K{line}{newline}" for line in lines))
+            sys.stdout.flush()
+            drawn = len(lines)
+
+            key = _read_key()
+            if key == "up":
+                cursor = (cursor - 1) % len(options)
+            elif key == "down":
+                cursor = (cursor + 1) % len(options)
+            elif key == "enter":
+                break
+            elif key == "b" and allow_back:
+                cursor = -1
+                break
+
+        # Erase the panel: the collapsed line the caller prints next takes its
+        # place.
+        sys.stdout.write(f"{_ESC}{drawn}A{_ESC}0J")
         sys.stdout.flush()
-        drawn = len(lines)
-
-        key = _read_key()
-        if key == "up":
-            cursor = (cursor - 1) % len(options)
-        elif key == "down":
-            cursor = (cursor + 1) % len(options)
-        elif key == "enter":
-            break
-        elif key == "b" and allow_back:
-            cursor = -1
-            break
-
-    # Erase the panel: the collapsed line the caller prints next takes its place.
-    sys.stdout.write(f"{_ESC}{drawn}A{_ESC}0J")
-    sys.stdout.flush()
     return BACK if cursor == -1 else options[cursor].value
 
 
