@@ -4,7 +4,10 @@
 
 ```
 server.py              Entrypoint — env validation happens on import, then uvicorn.run()
-onboard.py              Interactive taxonomy.json setup wizard — see docs/taxonomy.md
+setup/
+  install.py           First-run installer: vault, access, deps, mode, layout, index
+  onboard.py           Taxonomy specialist: maps roles/workspaces onto an existing vault
+  install_ui.py        Stdlib-only wizard UI both share — panels, arrow keys, plain fallback
 core/
   config.py            Env vars, startup validation, logging setup
   taxonomy.py          Loads taxonomy.json: role paths + custom category definitions

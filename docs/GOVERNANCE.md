@@ -17,7 +17,7 @@ base.
   role exists to guarantee project continuity, on top of whatever else it
   grows into.
 - **Contributors** — anyone who opens an issue or pull request. See
-  [CONTRIBUTING.md](CONTRIBUTING.md) for the process and acceptance
+  [CONTRIBUTING.md](../CONTRIBUTING.md) for the process and acceptance
   requirements.
 
 ## Decision-making
@@ -28,7 +28,7 @@ design calls day-to-day — that's an honest description of the project's
 current size, not an aspiration to stay closed to input. Design discussions
 happen in the open, on GitHub Issues and pull requests; anyone can weigh
 in, and significant decisions get a documented rationale (in commit
-messages, PR descriptions, or [SECURITY.md](SECURITY.md)/[README.md](README.md)
+messages, PR descriptions, or [SECURITY.md](../SECURITY.md)/[README.md](../README.md)
 where relevant) rather than being made silently.
 
 If the co-maintainer becomes active in day-to-day design decisions, or the

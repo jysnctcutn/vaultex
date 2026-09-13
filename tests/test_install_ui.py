@@ -1,0 +1,438 @@
+"""The installer's hand-rolled selector.
+
+Decision §9.5 ruled out every off-the-shelf option: install.py runs on the
+bare system interpreter before pip has run, and on Path B it runs on the
+host where the deps live in the container. So this is termios + ANSI, and
+the parts worth testing are the ones a library would otherwise guarantee --
+that the frame lines up, that a pipe still gets a usable prompt, and that
+`b` reaches the previous step.
+"""
+
+import re
+
+import pytest
+
+import install_ui
+from install_ui import BACK, Option
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+OPTIONS = [
+    Option("professional", "Professional", ["30 tools.", "VAULTEX_MODE=professional"], recommended=True),
+    Option("basic", "Basic", ["4 tools."]),
+]
+
+
+@pytest.fixture
+def plain(monkeypatch):
+    """Force the numbered fallback — the path a pipe, a log file, or a
+    terminal that can't do raw mode takes."""
+    monkeypatch.setattr(install_ui, "_interactive", lambda: False)
+
+
+def _answers(monkeypatch, *values):
+    it = iter(values)
+    monkeypatch.setattr("builtins.input", lambda *_: next(it))
+
+
+# --- framing -----------------------------------------------------------------
+
+def test_every_panel_line_is_the_same_visible_width():
+    """ANSI codes occupy no columns, so the frame only lines up if the
+    renderer measures printable length rather than len(str)."""
+    lines = install_ui._panel("Mode", "Step 3 of 4", OPTIONS, 0, "Switchable later.")
+    widths = {len(_ANSI.sub("", line)) for line in lines}
+    assert widths == {install_ui.WIDTH}
+
+
+def test_the_selected_option_is_the_marked_one():
+    first = _ANSI.sub("", "\n".join(install_ui._panel("Mode", "Step 3 of 4", OPTIONS, 0, "")))
+    second = _ANSI.sub("", "\n".join(install_ui._panel("Mode", "Step 3 of 4", OPTIONS, 1, "")))
+    assert "(*) Professional" in first and "( ) Basic" in first
+    assert "( ) Professional" in second and "(*) Basic" in second
+
+
+def test_explainer_lines_reach_the_panel():
+    """The reason a custom selector beat every library surveyed: each option
+    carries 3-5 lines, not one string."""
+    body = _ANSI.sub("", "\n".join(install_ui._panel("Mode", "Step 3 of 4", OPTIONS, 0, "")))
+    assert "VAULTEX_MODE=professional" in body
+    assert "30 tools." in body
+
+
+@pytest.mark.parametrize("title", [
+    "Mode",
+    "Default folder for captured brainstorms/conversation conclusions",
+    "Append-only agent session/event log (log_event, start_session, close_session)",
+    "x" * 200,
+])
+def test_a_long_title_cannot_break_the_frame(title):
+    """The title bar is the one place text can't wrap. Padding used to clamp
+    to zero and push the corner past the edge, so onboard's longer role
+    descriptions split the box open."""
+    lines = install_ui._panel(title, "Role 6 of 7", OPTIONS, 0, "")
+    assert {len(_ANSI.sub("", line)) for line in lines} == {install_ui.WIDTH}
+
+
+def test_a_long_step_indicator_cannot_break_the_frame():
+    lines = install_ui._panel("Mode", "Step " + "9" * 120, OPTIONS, 0, "")
+    assert {len(_ANSI.sub("", line)) for line in lines} == {install_ui.WIDTH}
+
+
+def test_a_long_explainer_wraps_instead_of_breaking_the_frame():
+    long_option = [Option("x", "X", ["word " * 60])]
+    lines = install_ui._panel("T", "Step 1 of 4", long_option, 0, "")
+    assert {len(_ANSI.sub("", line)) for line in lines} == {install_ui.WIDTH}
+
+
+def test_the_recommended_marker_is_shown():
+    body = _ANSI.sub("", "\n".join(install_ui._panel("Mode", "Step 3 of 4", OPTIONS, 0, "")))
+    assert "Professional  (recommended)" in body
+
+
+# --- the non-TTY fallback ----------------------------------------------------
+
+def test_enter_takes_the_default(plain, monkeypatch):
+    _answers(monkeypatch, "")
+    assert install_ui.select("Mode", "Step 3 of 4", OPTIONS) == "professional"
+
+
+def test_the_default_is_configurable(plain, monkeypatch):
+    _answers(monkeypatch, "")
+    assert install_ui.select("Mode", "Step 3 of 4", OPTIONS, default=1) == "basic"
+
+
+def test_a_number_picks_that_option(plain, monkeypatch):
+    _answers(monkeypatch, "2")
+    assert install_ui.select("Mode", "Step 3 of 4", OPTIONS) == "basic"
+
+
+def test_an_invalid_choice_reprompts_rather_than_guessing(plain, monkeypatch):
+    _answers(monkeypatch, "9", "nonsense", "1")
+    assert install_ui.select("Mode", "Step 3 of 4", OPTIONS) == "professional"
+
+
+def test_b_goes_back_when_the_step_allows_it(plain, monkeypatch):
+    _answers(monkeypatch, "b")
+    assert install_ui.select("Mode", "Step 3 of 4", OPTIONS, allow_back=True) == BACK
+
+
+def test_b_is_just_an_invalid_choice_when_back_is_closed(plain, monkeypatch):
+    """Step 3 forbids going back: dependencies are already installed by then."""
+    _answers(monkeypatch, "b", "2")
+    assert install_ui.select("Mode", "Step 3 of 4", OPTIONS, allow_back=False) == "basic"
+
+
+def test_the_fallback_still_prints_the_explainers(plain, monkeypatch, capsys):
+    _answers(monkeypatch, "")
+    install_ui.select("Mode", "Step 3 of 4", OPTIONS, footer="Switchable later.")
+    out = capsys.readouterr().out
+    assert "VAULTEX_MODE=professional" in out
+    assert "Switchable later." in out
+
+
+def test_a_piped_stdin_is_not_treated_as_interactive(monkeypatch):
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False, raising=False)
+    assert install_ui._interactive() is False
+
+
+def test_a_dumb_terminal_is_not_treated_as_interactive(monkeypatch):
+    monkeypatch.setenv("TERM", "dumb")
+    assert install_ui._interactive() is False
+
+
+def test_the_collapsed_line_records_the_answer(capsys):
+    install_ui.step_done("Mode", "professional")
+    assert "Mode" in capsys.readouterr().out
+
+
+# --- the interactive path ----------------------------------------------------
+#
+# Everything above exercises the numbered fallback. These cover the raw-mode
+# selector a user actually meets, split in two so neither needs a live tty:
+# _decode maps keypresses, and select()'s loop is driven through a scripted
+# _read_key.
+
+
+@pytest.mark.parametrize(("ch", "tail", "expected"), [
+    ("\x1b", "[A", "up"),
+    ("\x1b", "[B", "down"),
+    ("\x1b", "", "escape"),        # a bare Escape sends nothing more
+    ("\x1b", "[C", ""),            # left/right: ignored, not misread as a move
+    ("\r", "", "enter"),
+    ("\n", "", "enter"),
+    ("b", "", "b"),
+    ("B", "", "b"),                # shift shouldn't defeat "b goes back"
+])
+def test_keypresses_decode_to_the_right_action(ch, tail, expected):
+    assert install_ui._decode(ch, tail) == expected
+
+
+def test_ctrl_c_interrupts_even_though_raw_mode_disabled_the_signal():
+    """Raw mode turns off ISIG, so the SIGINT a user expects never fires --
+    without this the installer would ignore Ctrl-C entirely."""
+    with pytest.raises(KeyboardInterrupt):
+        install_ui._decode("\x03")
+
+
+@pytest.fixture
+def keys(monkeypatch):
+    """Drive select()'s real interactive loop with a scripted key sequence."""
+    monkeypatch.setattr(install_ui, "_interactive", lambda: True)
+
+    def script(*presses):
+        it = iter(presses)
+        monkeypatch.setattr(install_ui, "_read_key", lambda: next(it))
+    return script
+
+
+def test_enter_confirms_the_highlighted_option(keys, capsys):
+    keys("enter")
+    assert install_ui.select("Mode", "Step 3 of 4", OPTIONS) == "professional"
+
+
+def test_the_down_arrow_moves_the_cursor(keys):
+    keys("down", "enter")
+    assert install_ui.select("Mode", "Step 3 of 4", OPTIONS) == "basic"
+
+
+def test_the_up_arrow_wraps_to_the_last_option(keys):
+    keys("up", "enter")
+    assert install_ui.select("Mode", "Step 3 of 4", OPTIONS) == "basic"
+
+
+def test_down_then_up_returns_to_the_first(keys):
+    keys("down", "up", "enter")
+    assert install_ui.select("Mode", "Step 3 of 4", OPTIONS) == "professional"
+
+
+def test_unknown_keys_are_ignored_rather_than_confirming(keys):
+    keys("", "escape", "z", "enter")
+    assert install_ui.select("Mode", "Step 3 of 4", OPTIONS) == "professional"
+
+
+def test_b_goes_back_through_the_interactive_loop(keys):
+    keys("b")
+    assert install_ui.select("Mode", "Step 3 of 4", OPTIONS, allow_back=True) == BACK
+
+
+def test_b_does_not_go_back_when_the_step_forbids_it(keys):
+    """Step 3 forbids it: dependencies are already installed by then."""
+    keys("b", "down", "enter")
+    assert install_ui.select("Mode", "Step 3 of 4", OPTIONS, allow_back=False) == "basic"
+
+
+def test_the_scrollback_is_not_wiped(keys, capsys):
+    """No alternate screen buffer: a full-screen TUI clears on exit and takes
+    the summary and the "Later" command block with it."""
+    keys("enter")
+    install_ui.select("Mode", "Step 3 of 4", OPTIONS)
+    assert "?1049h" not in capsys.readouterr().out
+
+
+def test_the_panel_rewinds_instead_of_stacking(keys, capsys):
+    keys("down", "enter")
+    install_ui.select("Mode", "Step 3 of 4", OPTIONS)
+    assert re.search(r"\x1b\[\d+A", capsys.readouterr().out)
+
+
+def test_the_panel_is_erased_so_a_collapsed_line_can_replace_it(keys, capsys):
+    keys("enter")
+    install_ui.select("Mode", "Step 3 of 4", OPTIONS)
+    assert "\x1b[0J" in capsys.readouterr().out
+
+
+# The two Xubuntu bugs, both from the same root cause: an arrow's ESC was read
+# through sys.stdin, whose text wrapper swallowed the "[A"/"[B" tail into its
+# own buffer. Reading the fd is what keeps a sequence whole, so these drive
+# _read_fd_key over a real pipe.
+
+
+@pytest.fixture
+def key_fd():
+    """A pipe standing in for the terminal; yields (feed, read_one)."""
+    import os
+
+    read_fd, write_fd = os.pipe()
+
+    def feed(data):
+        os.write(write_fd, data)
+
+    try:
+        yield feed, lambda: install_ui._read_fd_key(read_fd)
+    finally:
+        os.close(read_fd)
+        os.close(write_fd)
+
+
+@pytest.fixture
+def masked_fd():
+    """The same pipe, driving _read_masked instead of the key decoder."""
+    import os
+
+    read_fd, write_fd = os.pipe()
+    try:
+        yield (lambda data: os.write(write_fd, data)), lambda: install_ui._read_masked(read_fd)
+    finally:
+        os.close(read_fd)
+        os.close(write_fd)
+
+
+@pytest.fixture
+def masked_fd_closed():
+    import os
+
+    read_fd, write_fd = os.pipe()
+    os.close(write_fd)
+    try:
+        yield lambda: install_ui._read_masked(read_fd)
+    finally:
+        os.close(read_fd)
+
+
+@pytest.mark.parametrize(("sent", "expected"), [
+    (b"\x1b[A", "up"),
+    (b"\x1b[B", "down"),
+    (b"\x1bOA", "up"),      # application-cursor mode (DECCKM)
+    (b"\x1bOB", "down"),
+    (b"\r", "enter"),
+    (b"b", "b"),
+])
+def test_a_whole_escape_sequence_reads_as_one_key(key_fd, sent, expected):
+    feed, read_one = key_fd
+    feed(sent)
+    assert read_one() == expected
+
+
+def test_the_down_arrow_is_never_mistaken_for_the_back_key(key_fd):
+    """ESC [ B losing its tail degrades to a literal `b` -- which is "go back
+    a step", so arrowing down to remote access returned to Step 1."""
+    feed, read_one = key_fd
+    feed(b"\x1b[B")
+    assert read_one() == "down"
+
+
+def test_one_arrow_press_consumes_exactly_one_arrow(key_fd):
+    """The tail read must stop at the sequence's final byte, or a burst of
+    presses is swallowed and the cursor appears to miss keys."""
+    feed, read_one = key_fd
+    feed(b"\x1b[B\x1b[B\r")
+    assert [read_one() for _ in range(3)] == ["down", "down", "enter"]
+
+
+def test_a_bare_escape_does_not_block_waiting_for_a_tail(key_fd):
+    feed, read_one = key_fd
+    feed(b"\x1b")
+    assert read_one() == "escape"
+
+
+def test_a_closed_stdin_raises_instead_of_spinning_the_panel():
+    """os.read returning nothing means EOF; without this select() would redraw
+    forever against a dead fd."""
+    import os
+
+    read_fd, write_fd = os.pipe()
+    os.close(write_fd)
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            install_ui._read_fd_key(read_fd)
+    finally:
+        os.close(read_fd)
+
+
+# ask_secret: echo-off input reads as a hang, because nothing appears as you
+# type. These pin the parts that make it survivable.
+
+
+def test_a_secret_prompt_says_the_input_is_hidden(monkeypatch, capsys):
+    monkeypatch.setattr(install_ui.getpass, "getpass", lambda prompt="": "tskey-abc")
+    monkeypatch.setattr(install_ui, "_flush_input", lambda: None)
+    assert install_ui.ask_secret("Paste your Tailscale auth key:") == "tskey-abc"
+    assert "hidden" in capsys.readouterr().out
+
+
+def test_a_secret_is_never_echoed_back(monkeypatch, capsys):
+    monkeypatch.setattr(install_ui.getpass, "getpass", lambda prompt="": "  tskey-secret  ")
+    monkeypatch.setattr(install_ui, "_flush_input", lambda: None)
+    assert install_ui.ask_secret("Key:") == "tskey-secret"
+    assert "tskey-secret" not in capsys.readouterr().out
+
+
+def test_a_pipe_fails_loudly_instead_of_blocking_on_a_secret(monkeypatch):
+    """getpass falls back to reading sys.stdin when there's no tty; on a pipe
+    that either blocks or hits EOF, and EOF must not look like an empty key."""
+    def eof(prompt=""):
+        raise EOFError
+
+    monkeypatch.setattr(install_ui.getpass, "getpass", eof)
+    monkeypatch.setattr(install_ui, "_flush_input", lambda: None)
+    with pytest.raises(SystemExit, match="No terminal available"):
+        install_ui.ask_secret("Key:")
+
+
+def test_type_ahead_is_dropped_before_a_secret_prompt(monkeypatch):
+    """An extra Enter left over from confirming the previous panel would
+    otherwise be read as an empty answer."""
+    called = []
+    monkeypatch.setattr(install_ui, "_flush_input", lambda: called.append(True))
+    monkeypatch.setattr(install_ui.getpass, "getpass", lambda prompt="": "k")
+    install_ui.ask_secret("Key:")
+    assert called == [True]
+
+
+# _read_masked is the interactive half of ask_secret: one * per character, and
+# the key itself never reaching the screen. Driven over a pipe, like the key
+# reader above.
+
+
+def test_masked_input_returns_what_was_typed(masked_fd):
+    feed, read_line = masked_fd
+    feed(b"tskey-abc123\r")
+    assert read_line() == "tskey-abc123"
+
+
+def test_masked_input_prints_one_star_per_character(masked_fd, capsys):
+    feed, read_line = masked_fd
+    feed(b"abc\r")
+    read_line()
+    assert capsys.readouterr().out.startswith("***")
+
+
+def test_the_secret_never_reaches_the_screen(masked_fd, capsys):
+    feed, read_line = masked_fd
+    feed(b"tskey-secret\r")
+    assert read_line() == "tskey-secret"
+    assert "tskey-secret" not in capsys.readouterr().out
+
+
+def test_backspace_erases_a_character_and_its_star(masked_fd, capsys):
+    feed, read_line = masked_fd
+    feed(b"abx\x7fc\r")
+    assert read_line() == "abc"
+    assert capsys.readouterr().out.count("\b \b") == 1
+
+
+def test_ctrl_u_clears_the_line(masked_fd):
+    feed, read_line = masked_fd
+    feed(b"wrong\x15right\r")
+    assert read_line() == "right"
+
+
+def test_an_arrow_key_is_not_swallowed_into_the_secret(masked_fd):
+    """Raw mode means an arrow arrives as ESC [ D; without consuming the tail
+    the `[` and `D` would land in the key."""
+    feed, read_line = masked_fd
+    feed(b"ab\x1b[Dc\r")
+    assert read_line() == "abc"
+
+
+def test_ctrl_c_still_cancels_a_secret_prompt(masked_fd):
+    feed, read_line = masked_fd
+    feed(b"ab\x03")
+    with pytest.raises(KeyboardInterrupt):
+        read_line()
+
+
+def test_a_closed_stdin_raises_rather_than_returning_an_empty_secret(masked_fd_closed):
+    with pytest.raises(EOFError):
+        masked_fd_closed()

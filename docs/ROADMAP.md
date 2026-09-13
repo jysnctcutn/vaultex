@@ -2,7 +2,7 @@
 
 What Vaultex intends to do, and explicitly not do, over the next year. This
 reflects the project's actual working TODO list, not aspirational planning —
-see [CONTRIBUTING.md](CONTRIBUTING.md) if you want to help with any of it.
+see [CONTRIBUTING.md](../CONTRIBUTING.md) if you want to help with any of it.
 
 ## Shipped
 

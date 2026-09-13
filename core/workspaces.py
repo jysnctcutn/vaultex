@@ -12,32 +12,28 @@ restart -- unlike roles and custom categories.
 from pathlib import Path
 
 from .config import TAXONOMY_JSON_PATH, logger
+from .presets import RESERVED_NAMES, ReservedWorkspaceName, check_name_allowed
 from .taxonomy import load_raw, roles
+
+# Re-exported: the rules live in core/presets.py so install.py can enforce
+# them without importing dotenv (see that module's docstring). Callers keep
+# importing them from here, where workspace behaviour otherwise lives.
+__all__ = [
+    "RESERVED_NAMES",
+    "ReservedWorkspaceName",
+    "WorkspaceNotConfigured",
+    "available",
+    "check_name_allowed",
+    "default_name",
+    "resolve",
+]
 
 # Fallback for a vault with no `workspaces` block, derived from the two
 # legacy project roles. First entry is the default. These labels exist only
 # for un-migrated vaults and are meant to be renamed.
 _LEGACY_WORKSPACES = (("Projects", "builder_projects"), ("Work", "professional_projects"))
 
-# Retired vocabulary, blocked for new workspaces so it can't reappear under
-# user control. Vaults already using them in an explicit block keep working.
-RESERVED_NAMES = frozenset({"builder", "professional"})
-
 _cache: tuple[int, dict[str, Path], str | None] | None = None
-
-
-class ReservedWorkspaceName(ValueError):
-    """A new workspace tried to use retired vocabulary."""
-
-
-def check_name_allowed(name: str) -> str:
-    """Reject a reserved name. Called by onboarding and by resolution, so a
-    hand-edited taxonomy.json can't reintroduce what onboarding refuses."""
-    if name.strip().casefold() in RESERVED_NAMES:
-        raise ReservedWorkspaceName(
-            f"{name!r} is a reserved legacy name. Choose another, e.g. 'Personal' or 'Work'."
-        )
-    return name
 
 
 class WorkspaceNotConfigured(ValueError):
@@ -97,7 +93,7 @@ def resolve(workspace: str | None = None) -> tuple[str, Path]:
     entries = available()
     if not entries:
         raise WorkspaceNotConfigured(
-            "No workspaces are configured for this vault. Run `python3 onboard.py` to name one."
+            "No workspaces are configured for this vault. Run `python3 setup/onboard.py` to name one."
         )
 
     name = workspace if workspace is not None else default_name()

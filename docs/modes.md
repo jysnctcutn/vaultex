@@ -1,14 +1,19 @@
 # Modes
 
-Vaultex runs in one of two modes. `python3 onboard.py` asks which on its
-first prompt and records the answer as `VAULTEX_MODE` in `.env`.
+Vaultex runs in one of two modes. `python3 setup/install.py` asks which at step 3
+and records the answer as `VAULTEX_MODE` in `.env`.
+
+The question lives in the installer, not in `setup/onboard.py`: mode changes the
+registered toolset, so it is a top-level product choice rather than a
+taxonomy detail. `setup/onboard.py` is the taxonomy specialist and never writes
+`VAULTEX_MODE`.
 
 | | **Basic** | **Professional** |
 |---|---|---|
 | Tools registered | 4 | 31 |
 | | `search`, `grep`, `read_note`, `write_note` | the above plus `save_decision`, `save_brainstorm`, episodic session log, distillation, coordination, per-category `get`/`create`, `list_workspaces` |
 | Taxonomy | none | `taxonomy.json` (roles, workspaces, custom categories) |
-| Folder layout | yours, untouched | PARA for a fresh vault, or mapped onto folders you already have |
+| Folder layout | yours, untouched | the `simple` structure for a fresh vault, or mapped onto folders you already have |
 | Writes | explicit path only | routed, named, section-checked, cross-linked |
 
 **Basic** is the "point it at any Markdown folder" path. `write_note(path,
@@ -36,9 +41,9 @@ leaves three tools: `search`, `grep`, `read_note`.
 
 ## Choosing and switching
 
-Re-run `python3 onboard.py` and pick the other mode, or set
-`VAULTEX_MODE=basic|professional` in `.env` by hand. Restart the server to
-pick it up.
+Set `VAULTEX_MODE=basic|professional` in `.env` by hand, or re-run
+`python3 setup/install.py` and pick the other mode at step 3. Restart the server
+to pick it up.
 
 Choosing Basic leaves any existing `taxonomy.json` untouched, so switching
 back restores your Professional mapping exactly as it was.
@@ -51,7 +56,8 @@ Basic. Every existing install therefore keeps its current behavior with no
 Starting the server in Professional mode with no taxonomy configured logs a
 warning — that combination registers every structured tool and then fails
 each one at call time with `TaxonomyNotConfigured`, which is almost never
-what you want. Either run `onboard.py` or switch to Basic.
+what you want. Either run `setup/onboard.py` to map your folders, or switch to
+Basic.
 
 ## Workspaces
 

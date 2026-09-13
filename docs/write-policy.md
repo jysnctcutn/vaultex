@@ -19,7 +19,7 @@ create_missing_folders: true # create a write's target folder if absent
 ```
 
 Edit the frontmatter and save — **the next write picks it up, no restart**.
-The file ships as `write_policy.example.md`, and `onboard.py` seeds a copy
+The file ships as `write_policy.example.md`, and `setup/onboard.py` seeds a copy
 into your vault on the Professional path. With no file at all, every toggle
 defaults to `true`, which is exactly the pre-existing behavior. A malformed
 file also falls back to the defaults rather than breaking writes.
@@ -81,7 +81,7 @@ These are normal, expected outcomes rather than bugs — worth recognising
 when a tool returns one.
 
 **`TaxonomyNotConfigured`** — a Professional-mode tool needs a
-`taxonomy.json` role your vault hasn't mapped. Run `python3 onboard.py`, or
+`taxonomy.json` role your vault hasn't mapped. Run `python3 setup/onboard.py`, or
 switch to [Basic mode](modes.md), where no taxonomy is needed and these
 tools aren't registered in the first place.
 

@@ -1,96 +1,19 @@
-"""Onboarding wizard: the .env writer and the shipped layout maps.
+"""Onboarding wizard: the shipped layout maps and the flows that write them.
 
-_upsert_env is the only code in the project that rewrites a file holding
-secrets (MCP_AUTH_TOKEN, AUTHORIZE_PASSWORD), so most of this module is
-about proving it touches exactly one line and leaves the rest byte-for-byte
-intact. Every test points BASE_DIR at a tmp_path -- none of them may go near
-the developer's real .env.
+Mode is no longer this script's business -- it moved to install.py, where the
+30-tools-vs-4 choice is visible as a product decision rather than buried in
+the taxonomy specialist. The .env writer moved with it; its tests now live in
+tests/test_install.py. What's left here is the mapping work onboard.py still
+owns.
 """
+
+import json
 
 import pytest
 
 import onboard
 from core import taxonomy
-from onboard import AUTHOR_TAXONOMY, PARA_TAXONOMY, ROLES, _upsert_env
-
-SECRETS = (
-    "MCP_AUTH_TOKEN=pretend-token-value\n"
-    "AUTHORIZE_PASSWORD=pretend-password-value\n"
-    "VAULTEX_PATH=/somewhere/vault\n"
-)
-
-
-@pytest.fixture
-def env_file(monkeypatch, tmp_path):
-    monkeypatch.setattr(onboard, "BASE_DIR", tmp_path)
-    return tmp_path / ".env"
-
-
-def test_creates_env_when_missing(env_file):
-    _upsert_env("VAULTEX_MODE", "basic")
-    assert env_file.read_text(encoding="utf-8") == "VAULTEX_MODE=basic\n"
-
-
-def test_appends_without_disturbing_existing_lines(env_file):
-    env_file.write_text(SECRETS, encoding="utf-8")
-    _upsert_env("VAULTEX_MODE", "professional")
-    assert env_file.read_text(encoding="utf-8") == SECRETS + "VAULTEX_MODE=professional\n"
-
-
-def test_replaces_in_place_without_duplicating(env_file):
-    env_file.write_text(SECRETS + "VAULTEX_MODE=basic\n", encoding="utf-8")
-    _upsert_env("VAULTEX_MODE", "professional")
-    text = env_file.read_text(encoding="utf-8")
-    assert text.count("VAULTEX_MODE=") == 1
-    assert text == SECRETS + "VAULTEX_MODE=professional\n"
-
-
-def test_every_other_line_survives_byte_for_byte(env_file):
-    """The one that matters: a rewrite must not reformat, reorder, drop, or
-    re-quote anything it doesn't own."""
-    original = (
-        "# a comment\n"
-        "MCP_AUTH_TOKEN=pretend-token-value\n"
-        "\n"
-        'AUTHORIZE_PASSWORD="quoted value with spaces"\n'
-        "EXCLUDED_AREAS=01-Professional\n"
-        "VAULTEX_MODE=basic\n"
-        "# trailing comment\n"
-    )
-    env_file.write_text(original, encoding="utf-8")
-    _upsert_env("VAULTEX_MODE", "professional")
-
-    before = original.splitlines()
-    after = env_file.read_text(encoding="utf-8").splitlines()
-    assert len(before) == len(after)
-    for b, a in zip(before, after, strict=True):
-        if b.startswith("VAULTEX_MODE="):
-            assert a == "VAULTEX_MODE=professional"
-        else:
-            assert a == b
-
-
-def test_handles_a_file_with_no_trailing_newline(env_file):
-    env_file.write_text("MCP_AUTH_TOKEN=pretend-token-value", encoding="utf-8")
-    _upsert_env("VAULTEX_MODE", "basic")
-    assert env_file.read_text(encoding="utf-8") == (
-        "MCP_AUTH_TOKEN=pretend-token-value\nVAULTEX_MODE=basic\n"
-    )
-
-
-def test_does_not_match_a_key_that_merely_shares_a_prefix(env_file):
-    env_file.write_text("VAULTEX_MODE_OVERRIDE=something\n", encoding="utf-8")
-    _upsert_env("VAULTEX_MODE", "basic")
-    text = env_file.read_text(encoding="utf-8")
-    assert "VAULTEX_MODE_OVERRIDE=something\n" in text
-    assert "VAULTEX_MODE=basic\n" in text
-
-
-def test_tolerates_whitespace_around_an_existing_key(env_file):
-    env_file.write_text("  VAULTEX_MODE = basic\n", encoding="utf-8")
-    _upsert_env("VAULTEX_MODE", "professional")
-    assert env_file.read_text(encoding="utf-8") == "VAULTEX_MODE=professional\n"
-
+from onboard import AUTHOR_TAXONOMY, PARA_TAXONOMY, ROLES
 
 # --- shipped layout maps ----------------------------------------------------
 
@@ -147,65 +70,42 @@ def test_author_layout_supplies_its_project_roots_as_workspaces():
     assert onboard.AUTHOR_WORKSPACES["default"] in entries
 
 
-# --- the Basic flow, end to end ---------------------------------------------
+# --- flows ------------------------------------------------------------------
 
-def test_basic_flow_writes_mode_and_leaves_taxonomy_alone(monkeypatch, tmp_path):
-    """Trying Basic must not destroy a Professional mapping you can switch
-    back to, so taxonomy.json is left byte-for-byte untouched."""
+@pytest.fixture
+def wizard(monkeypatch, tmp_path):
+    """A vault and a taxonomy.json of our own, never the developer's."""
     vault = tmp_path / "vault"
     vault.mkdir()
-    taxonomy = tmp_path / "taxonomy.json"
-    existing = '{"roles": {"inbox": "00-Inbox"}, "custom_categories": []}'
-    taxonomy.write_text(existing, encoding="utf-8")
-
+    taxonomy_path = tmp_path / "taxonomy.json"
     monkeypatch.setattr(onboard, "BASE_DIR", tmp_path)
-    monkeypatch.setattr(onboard, "TAXONOMY_PATH", taxonomy)
+    monkeypatch.setattr(onboard, "TAXONOMY_PATH", taxonomy_path)
     monkeypatch.setenv("VAULTEX_PATH", str(vault))
     monkeypatch.setattr("sys.argv", ["onboard.py"])
+    return vault, taxonomy_path
 
-    answers = iter(["1", "n"])  # mode: Basic; scaffold PARA: no
-    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+
+def _answers(monkeypatch, *values):
+    it = iter(values)
+    monkeypatch.setattr("builtins.input", lambda *_: next(it))
+
+
+def test_the_wizard_no_longer_writes_a_mode(monkeypatch, wizard):
+    """Mode belongs to install.py (§9.1). Running the taxonomy specialist
+    must not reach into .env at all."""
+    vault, _ = wizard
+    _answers(monkeypatch, "1", "", "n")  # layout: simple; one workspace; no custom categories
+    onboard.main()
+    assert not (onboard.BASE_DIR / ".env").exists()
+
+
+def test_simple_layout_writes_workspaces(monkeypatch, wizard):
+    vault, taxonomy_path = wizard
+    _answers(monkeypatch, "1", "Personal, Work", "n")
 
     onboard.main()
 
-    assert (tmp_path / ".env").read_text(encoding="utf-8") == "VAULTEX_MODE=basic\n"
-    assert taxonomy.read_text(encoding="utf-8") == existing
-
-
-def test_basic_flow_can_scaffold_para(monkeypatch, tmp_path):
-    vault = tmp_path / "vault"
-    vault.mkdir()
-    monkeypatch.setattr(onboard, "BASE_DIR", tmp_path)
-    monkeypatch.setattr(onboard, "TAXONOMY_PATH", tmp_path / "taxonomy.json")
-    monkeypatch.setenv("VAULTEX_PATH", str(vault))
-    monkeypatch.setattr("sys.argv", ["onboard.py"])
-
-    answers = iter(["1", "y"])
-    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
-
-    onboard.main()
-
-    for name in onboard.PARA_FOLDERS:
-        assert (vault / name).is_dir()
-
-
-def test_professional_para_flow_writes_workspaces(monkeypatch, tmp_path):
-    vault = tmp_path / "vault"
-    vault.mkdir()
-    taxonomy = tmp_path / "taxonomy.json"
-    monkeypatch.setattr(onboard, "BASE_DIR", tmp_path)
-    monkeypatch.setattr(onboard, "TAXONOMY_PATH", taxonomy)
-    monkeypatch.setenv("VAULTEX_PATH", str(vault))
-    monkeypatch.setattr("sys.argv", ["onboard.py"])
-
-    # mode: Professional; layout: PARA; workspaces: two named; no custom categories
-    answers = iter(["2", "1", "Personal, Work", "n"])
-    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
-
-    onboard.main()
-
-    import json
-    data = json.loads(taxonomy.read_text(encoding="utf-8"))
+    data = json.loads(taxonomy_path.read_text(encoding="utf-8"))
     assert data["workspaces"]["default"] == "Personal"
     assert data["workspaces"]["entries"] == {
         "Personal": "Projects/Personal",
@@ -216,20 +116,86 @@ def test_professional_para_flow_writes_workspaces(monkeypatch, tmp_path):
     assert (vault / onboard.POLICY_FILENAME).is_file()
 
 
-def test_professional_single_workspace_adds_no_extra_layer(monkeypatch, tmp_path):
-    vault = tmp_path / "vault"
-    vault.mkdir()
-    taxonomy = tmp_path / "taxonomy.json"
-    monkeypatch.setattr(onboard, "BASE_DIR", tmp_path)
-    monkeypatch.setattr(onboard, "TAXONOMY_PATH", taxonomy)
-    monkeypatch.setenv("VAULTEX_PATH", str(vault))
-    monkeypatch.setattr("sys.argv", ["onboard.py"])
+def test_simple_layout_records_the_preset_key(monkeypatch, wizard):
+    _, taxonomy_path = wizard
+    _answers(monkeypatch, "1", "", "n")
+    onboard.main()
+    assert json.loads(taxonomy_path.read_text(encoding="utf-8"))["preset"] == "simple"
 
-    answers = iter(["2", "1", "", "n"])  # empty workspace answer
-    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+
+def test_a_single_workspace_adds_no_extra_layer(monkeypatch, wizard):
+    _, taxonomy_path = wizard
+    _answers(monkeypatch, "1", "", "n")  # empty workspace answer
 
     onboard.main()
 
-    import json
-    data = json.loads(taxonomy.read_text(encoding="utf-8"))
+    data = json.loads(taxonomy_path.read_text(encoding="utf-8"))
     assert data["workspaces"]["entries"] == {"Projects": "Projects"}
+
+
+def test_a_reserved_workspace_name_is_skipped_not_written(monkeypatch, wizard):
+    _, taxonomy_path = wizard
+    _answers(monkeypatch, "1", "Builder, Personal", "n")
+
+    onboard.main()
+
+    entries = json.loads(taxonomy_path.read_text(encoding="utf-8"))["workspaces"]["entries"]
+    assert "Builder" not in entries
+    assert "Personal" in entries
+
+
+def test_the_author_layout_is_hidden_on_a_populated_vault(monkeypatch, wizard, capsys):
+    """§9.4: pre-selecting a scaffold that creates four new top-level folders
+    is wrong for someone who already has 400 notes."""
+    vault, _ = wizard
+    (vault / "Existing").mkdir()
+    _answers(monkeypatch, "1", "", "n")
+
+    onboard.main()
+
+    assert "--advanced" in capsys.readouterr().out
+
+
+def test_advanced_shows_the_author_layout_on_a_populated_vault(monkeypatch, wizard):
+    vault, taxonomy_path = wizard
+    (vault / "Existing").mkdir()
+    monkeypatch.setattr("sys.argv", ["onboard.py", "--advanced"])
+    _answers(monkeypatch, "3", "n")  # author's layout; no custom categories
+
+    onboard.main()
+
+    data = json.loads(taxonomy_path.read_text(encoding="utf-8"))
+    assert data["preset"] == "author"
+    assert data["roles"]["ideas"] == "02-Builder/Ideas"
+
+
+def test_add_workspace_appends_without_touching_roles(monkeypatch, wizard):
+    """The single-purpose command install.py's "Later" block points at."""
+    vault, taxonomy_path = wizard
+    taxonomy_path.write_text(json.dumps({
+        "roles": {"inbox": "0-Inbox"},
+        "custom_categories": [],
+        "workspaces": {"default": "Projects", "entries": {"Projects": "Projects"}},
+    }), encoding="utf-8")
+    monkeypatch.setattr("sys.argv", ["onboard.py", "--add-workspace"])
+    _answers(monkeypatch, "Client", "")  # name, then accept the default folder
+
+    onboard.main()
+
+    data = json.loads(taxonomy_path.read_text(encoding="utf-8"))
+    assert data["workspaces"]["entries"]["Client"] == "Projects/Client"
+    assert data["workspaces"]["default"] == "Projects"
+    assert data["roles"] == {"inbox": "0-Inbox"}
+    assert (vault / "Projects" / "Client").is_dir()
+
+
+def test_add_workspace_refuses_a_reserved_name(monkeypatch, wizard):
+    _, taxonomy_path = wizard
+    monkeypatch.setattr("sys.argv", ["onboard.py", "--add-workspace"])
+    _answers(monkeypatch, "Professional", "Personal", "")
+
+    onboard.main()
+
+    entries = json.loads(taxonomy_path.read_text(encoding="utf-8"))["workspaces"]["entries"]
+    assert "Professional" not in entries
+    assert "Personal" in entries

@@ -14,7 +14,7 @@ one-offs):
 | `MCP_HOST` | `0.0.0.0` | Bind address |
 | `MCP_PORT` | `8000` | Bind port |
 | `EXCLUDED_AREAS` | *(none)* | Comma-separated top-level folders this instance refuses to touch at all, e.g. `01-Professional` |
-| `VAULTEX_MODE` | *(derived)* | `basic` or `professional`. Unset = derived from `taxonomy.json` (configured → professional, else basic). Set by `onboard.py`. See [Modes](modes.md) |
+| `VAULTEX_MODE` | *(derived)* | `basic` or `professional`. Unset = derived from `taxonomy.json` (configured → professional, else basic). Set by `setup/onboard.py`. See [Modes](modes.md) |
 | `READ_ONLY` | `false` | `true` = write tools aren't even registered (not just blocked at call time) |
 | `ENABLE_NOTE_MOVE` | `false` | `true` = registers `move_note`. Gated separately from, on top of, `READ_ONLY` — off by default even in read/write mode |
 | `ENABLE_DISTILL_APPLY` | `false` | `true` = registers `apply_distillation` (distillation's durable write-back). Same gating pattern as `ENABLE_NOTE_MOVE`; `distill_session` stays available regardless |
